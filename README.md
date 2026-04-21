@@ -1,92 +1,91 @@
 # DP Glyphs Scripts
 
-A small collection of utility scripts for [Glyphs](https://glyphsapp.com/) focused on spacing, kerning, and moving metrics data between UFOs and `.glyphs` sources.
+A collection of utility scripts for [Glyphs](https://glyphsapp.com/) focused on spacing, kerning, component cleanup, layer utilities, and font-production helpers.
 
-These scripts are meant to run inside Glyphs on macOS, not as standalone command-line tools.
-
-## Included Scripts
-
-### `master_spacing_and_kerning.py`
-
-Batch-adjust spacing per master, with optional kerning updates to match.
-
-Highlights:
-
-- Adjust selected masters from one window
-- Work in `Percent`, `Fixed value`, `InDesign`, `Figma`, or `Web` units
-- Limit the scope to `All glyphs`, `Selected glyphs only`, or `Exporting glyphs only`
-- Choose between `Spacing only` and `Spacing and kerning`
-- Preview converted values before applying them
-
-Notes:
-
-- For spacing, the script writes `LSB` and `RSB`
-- It does not edit outlines or write widths directly
-- For kerning, it updates pairs in the selected master scope
-
-### `transfer_ufo_metrics_and_kerning.py`
-
-Transfer spacing, kerning, and kerning groups from UFO sources into a Glyphs file, master by master.
-
-Highlights:
-
-- Assign a different UFO to each master
-- Import spacing (`width + sidebearings`)
-- Import kerning
-- Import kerning groups before kerning
-- Replace existing kerning or merge into what is already in the file
-- Process all glyphs or only the currently selected glyphs
-- Optionally keep auto spacing untouched
-- Optionally remove existing metrics keys before import
-- Optionally lock imported values with `==`
-
-This script also includes a **Clean & Normalise Metrics** workflow that converts metric formulas into fixed values and can lock those values with `==` afterward.
-
-The script prints detailed progress and verification output to the Macro window.
-
-### `double equals before SB.py`
-
-Convert current sidebearings into locked `==` metric keys, or normalize existing sidebearing keys so they start with `==`.
-
-Highlights:
-
-- Apply to the active master or all masters
-- Apply to selected glyphs or the whole font
-- Optionally skip masters where the `MONO` axis value is `>= 1`
-
-This is useful when you want to freeze current sidebearing values into explicit metrics keys.
-
-### `Sidebearing Manager.py`
-
-This file is currently empty in the repository.
+These scripts are intended to run inside Glyphs on macOS, not as standalone command-line tools.
 
 ## Requirements
 
 - macOS
 - Glyphs 3
-- Glyphs' built-in Python environment
-
-One script, `double equals before SB.py`, imports `vanilla` for its floating window UI.
+- Glyphs Python environment
+- `vanilla` for scripts that open custom UI windows
 
 ## Installation
 
-1. Download or clone this repository.
-2. In Glyphs, open the Scripts folder:
-   `Script > Open Scripts Folder`
-3. Copy the `.py` files you want into that folder.
-4. Restart Glyphs or reload scripts so they appear in the Scripts menu.
+1. Clone or download this repository.
+2. In Glyphs, open the Scripts folder via `Script > Open Scripts Folder`.
+3. Copy the script files you want into your Glyphs Scripts folder.
+4. Restart Glyphs (or reload scripts) so they appear in the Scripts menu.
 
-Because the scripts include `# MenuTitle` metadata, Glyphs should expose them in the Scripts menu once they are placed in the right folder.
+Most files include `# MenuTitle` metadata, so they should show up in the Glyphs Scripts menu with a readable label.
 
-## Usage Tips
+## Script Index
 
-- Back up your `.glyphs` file before running bulk spacing or kerning operations
-- Open the Macro window if you want to inspect warnings, skips, or verification output
-- Start on a copy of the font when testing a new workflow, especially for UFO transfer
+### Spacing
 
-## Repo Notes
+- `Spacing/master_spacing_and_kerning.py`  
+  Batch-adjust spacing per selected masters, with optional kerning updates and unit conversions (`Percent`, `Fixed value`, `InDesign`, `Figma`, `Web`).
 
-- This repository is a script collection, not a packaged Glyphs plugin
-- File names are currently functional rather than polished
-- There is no test suite or standalone install process in the repo at the moment
+- `Spacing/transfer_ufo_metrics_and_kerning.py`  
+  Import spacing, kerning, and kerning groups from UFOs into a Glyphs source (master by master), with merge/overwrite options and metrics normalization tools.
 
+- `Spacing/double equals before SB.py`  
+  Converts sidebearings to locked `==` metrics keys (or normalizes existing keys), with options for glyph/master scope and optional MONO-axis filtering.
+
+- `Spacing/Tabular Figures Spacer.py`  
+  Sets fixed tabular widths (e.g. `.tf`, `.tosf`, `.tnum`) with options for centering, metrics keys, and component alignment behavior.
+
+- `Spacing/Sidebearing Manager.py`  
+  Sidebearing utility with options to apply per selected glyphs/all glyphs, flatten formula-derived values, and disable auto-alignment.
+
+### Kerning
+
+- `Kerning/Copy Kerning Exceptions to Double Accents.py`  
+  Copies kerning exceptions from selected base accented glyphs to corresponding double-accent variants through a UI workflow.
+
+### Components
+
+- `Components/Reset all corner components.py`  
+  Resets corner component hint scale values to 100% (`1.0, 1.0`) across the font.
+
+### Layers
+
+- `Layers/Fill Up Intermediate Layers.py`  
+  Generates missing intermediate/special layers for coordinate combinations and reinterpolates them.
+
+### Background
+
+- `Background/Clear Backgrounds in Selected Layers.py`  
+  UI tool to clear background paths/components/anchors in selected glyphs, with selectable layer scope.
+
+### Tools
+
+- `Tools/Validator bypass.py`  
+  Decomposes corner/cap components and rebuilds paths for selected layers; `Shift` applies to all layers in selected glyphs.
+
+- `Tools/Duplicate selected node.py`  
+  Duplicates the selected node and inserts the copy after it.
+
+- `Tools/Swapper.py`  
+  Two-way swap tool for glyph/layer data (including metrics and kerning), with UI controls.
+
+- `Tools/Horziontals calculator.py`  
+  UI calculator for horizontal stem targets from reference stem values and optical reduction settings.
+
+### Export
+
+- `Export/Selective Variable Font Export.py`  
+  Currently stored as a macOS Alias file in this repository, not a readable Python script.
+
+## Usage Notes
+
+- Back up your `.glyphs` file before running bulk operations.
+- Open Glyphs Macro Window to review logs/errors from scripts.
+- Test new workflows on a copy of your source first.
+
+## Repository Notes
+
+- This repo is a script collection, not a packaged Glyphs plugin.
+- Script naming reflects working file names in Glyphs workflows and may include legacy typos for compatibility.
+- There is currently no automated test suite in this repository.
