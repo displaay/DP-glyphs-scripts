@@ -69,7 +69,7 @@ def get_suffix_info(font):
     return results
 
 
-def execute_swap(font, source_glyph, target_name, deep_swap=True):
+def execute_swap(font, source_glyph, target_name, deep_swap=True, swap_unicode=False):
     """
     Perform a true two-way swap of data between source_glyph and target_name.
     """
@@ -77,52 +77,92 @@ def execute_swap(font, source_glyph, target_name, deep_swap=True):
     if target_glyph is None:
         return False, f"Target '{target_name}' not found."
 
+    def replace_layer_geometry(layer, new_paths, new_components):
+        """
+        Replace outlines/components by reassigning `shapes`.
+        GSLayer path/component proxies can be read-only for delete/clear.
+        """
+        layer.shapes = [p.copy() for p in new_paths] + [c.copy() for c in new_components]
+
+    def find_matching_target_layer(src_layer, used_target_layer_ids):
+        # Ignore background/temp layers that do not represent editable glyph data.
+        if not (src_layer.isMasterLayer or src_layer.isSpecialLayer):
+            return None
+
+        # Master layers share IDs across glyphs.
+        if src_layer.isMasterLayer:
+            master_id = src_layer.associatedMasterId or src_layer.layerId
+            if not master_id:
+                return None
+            layer = target_glyph.layers[master_id]
+            if layer is None or layer.layerId in used_target_layer_ids:
+                return None
+            return layer
+
+        # Special layers have per-glyph IDs; match by (name, associated master).
+        for candidate in target_glyph.layers:
+            if not candidate.isSpecialLayer:
+                continue
+            if candidate.layerId in used_target_layer_ids:
+                continue
+            if candidate.associatedMasterId != src_layer.associatedMasterId:
+                continue
+            if candidate.name != src_layer.name:
+                continue
+            return candidate
+
+        return None
+
+    used_target_layer_ids = set()
     for src_layer in source_glyph.layers:
-        master_id = src_layer.associatedMasterId
-        target_layer = target_glyph.layers[master_id]
+        target_layer = find_matching_target_layer(src_layer, used_target_layer_ids)
         if target_layer is None:
             continue
+        used_target_layer_ids.add(target_layer.layerId)
 
-        # 1. BACKUP Target Data
-        tgt_shapes_backup = [s.copy() for s in target_layer.shapes]
-        tgt_width_backup  = target_layer.width
+        # 1. BACKUP Target outline/component data
+        tgt_paths_backup      = [p.copy() for p in target_layer.paths]
+        tgt_components_backup = [c.copy() for c in target_layer.components]
         if deep_swap:
+            tgt_width_backup   = target_layer.width
             tgt_LSB_backup     = target_layer.LSB
             tgt_RSB_backup     = target_layer.RSB
             tgt_anchors_backup = [a.copy() for a in target_layer.anchors]
 
         # 2. SOURCE -> TARGET
-        target_layer.shapes = [s.copy() for s in src_layer.shapes]
-        target_layer.width  = src_layer.width
+        replace_layer_geometry(target_layer, src_layer.paths, src_layer.components)
         if deep_swap:
+            target_layer.width   = src_layer.width
             target_layer.LSB     = src_layer.LSB
             target_layer.RSB     = src_layer.RSB
             target_layer.anchors = [a.copy() for a in src_layer.anchors]
 
         # 3. TARGET BACKUP -> SOURCE
-        src_layer.shapes = tgt_shapes_backup
-        src_layer.width  = tgt_width_backup
+        replace_layer_geometry(src_layer, tgt_paths_backup, tgt_components_backup)
         if deep_swap:
+            src_layer.width   = tgt_width_backup
             src_layer.LSB     = tgt_LSB_backup
             src_layer.RSB     = tgt_RSB_backup
             src_layer.anchors = tgt_anchors_backup
 
-    # 4. Swap Glyph-level attributes (Kerning & Unicode)
+    # 4. Swap Glyph-level attributes (Kerning groups, optional Unicode)
     if deep_swap:
-        # Backup source kerning & unicode
+        # Backup source kerning groups (and optional unicode)
         src_left_kern  = source_glyph.leftKerningGroup
         src_right_kern = source_glyph.rightKerningGroup
-        src_unicode    = source_glyph.unicode
 
         # Target -> Source
         source_glyph.leftKerningGroup  = target_glyph.leftKerningGroup
         source_glyph.rightKerningGroup = target_glyph.rightKerningGroup
-        source_glyph.unicode           = target_glyph.unicode
 
         # Source Backup -> Target
         target_glyph.leftKerningGroup  = src_left_kern
         target_glyph.rightKerningGroup = src_right_kern
-        target_glyph.unicode           = src_unicode
+
+        if swap_unicode:
+            src_unicode = source_glyph.unicode
+            source_glyph.unicode = target_glyph.unicode
+            target_glyph.unicode = src_unicode
 
     return True, f"SWAPPED: {source_glyph.name} <-> {target_name}"
 
@@ -195,13 +235,19 @@ class SwapperDialog:
 
         w.deepCheck = CheckBox(
             (254, -110, -12, 20),
-            "Include metrics (LSB/RSB/width), kerning groups, anchors, and Unicode",
+            "Include metrics (LSB/RSB/width), kerning groups, and anchors",
             value=True,
             sizeStyle="small",
         )
+        w.unicodeCheck = CheckBox(
+            (254, -92, -12, 20),
+            "Swap Unicode values (advanced, usually OFF for .ssXX alternates)",
+            value=False,
+            sizeStyle="small",
+        )
 
-        w.swapSelBtn = Button((254, -80, 190, 24), "Swap Selected", callback=self._swap_selected)
-        w.swapAllBtn = Button((454, -80, 190, 24), "Swap ALL Valid", callback=self._swap_all)
+        w.swapSelBtn = Button((254, -72, 190, 24), "Swap Selected", callback=self._swap_selected)
+        w.swapAllBtn = Button((454, -72, 190, 24), "Swap ALL Valid", callback=self._swap_all)
 
         w.progress      = ProgressBar((254, -46, 250, 16), isIndeterminate=False)
         w.progressLabel = TextBox((514, -46, -12, 16), "", sizeStyle="small")
@@ -280,9 +326,9 @@ class SwapperDialog:
             self._set_status("No valid targets to swap. Check the Status column.")
             return
 
-        self._do_swap(valid_pairs, self.w.deepCheck.get())
+        self._do_swap(valid_pairs, self.w.deepCheck.get(), self.w.unicodeCheck.get())
 
-    def _do_swap(self, pair_list, deep):
+    def _do_swap(self, pair_list, deep, swap_unicode):
         total  = len(pair_list)
         errors = []
 
@@ -292,7 +338,13 @@ class SwapperDialog:
 
         try:
             for i, (src_g, target_name) in enumerate(pair_list):
-                ok, msg = execute_swap(self.font, src_g, target_name, deep_swap=deep)
+                ok, msg = execute_swap(
+                    self.font,
+                    src_g,
+                    target_name,
+                    deep_swap=deep,
+                    swap_unicode=swap_unicode,
+                )
                 if not ok:
                     errors.append(msg)
                     print("Swapper:", msg)
