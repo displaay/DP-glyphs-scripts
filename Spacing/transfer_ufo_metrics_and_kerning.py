@@ -1,5 +1,6 @@
 #MenuTitle: Transfer UFO Metrics and Kerning
 # -*- coding: utf-8 -*-
+# Copyright (c) 2026 Displaay Type Foundry. All rights reserved.
 # Intended to run inside GlyphsApp only.
 # Uses GlyphsApp and AppKit only.
 # vanilla was removed because it caused environment issues.

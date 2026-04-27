@@ -1,5 +1,6 @@
 # MenuTitle: Master Spacing and Kerning Adjuster
 # -*- coding: utf-8 -*-
+# Copyright (c) 2026 Displaay Type Foundry. All rights reserved.
 
 import traceback
 

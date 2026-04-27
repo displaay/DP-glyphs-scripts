@@ -1,5 +1,6 @@
 # encoding: utf-8
 # MenuTitle: Swapper
+# Copyright (c) 2026 Displaay Type Foundry. All rights reserved.
 
 """
 Swapper.py — Glyphs 3 Script

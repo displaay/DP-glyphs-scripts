@@ -1,5 +1,7 @@
 # MenuTitle: Copy Kerning Exceptions to Double Accents (with UI)
 # -*- coding: utf-8 -*-
+# Copyright (c) 2026 Displaay Type Foundry. All rights reserved.
+
 from __future__ import division, print_function, unicode_literals
 __doc__ = """
 Copies Kerning exceptions from selected base accented characters (e.g., Abreve, Acircumflex…)
@@ -60,21 +62,21 @@ class KerningUI(object):
 
         self.w.open()
 
-	def runCallback(self, sender):
-	    data = self.w.list.get()   # ✅ returns list of dicts
+    def runCallback(self, sender):
+        data = self.w.list.get()   # ✅ returns list of dicts
 
-	    selectedGlyphs = [
-	        row["Glyph"]
-	        for row in data
-	        if row.get("Do")
-	    ]
+        selectedGlyphs = [
+            row["Glyph"]
+            for row in data
+            if row.get("Do")
+        ]
 
-	    if not selectedGlyphs:
-	        Glyphs.showMacroWindow()
-	        print("⚠️ No glyphs selected.")
-	        return
+        if not selectedGlyphs:
+            Glyphs.showMacroWindow()
+            print("⚠️ No glyphs selected.")
+            return
 
-	    self.copyKerning(selectedGlyphs)
+        self.copyKerning(selectedGlyphs)
 
     def copyKerning(self, selectedGlyphs):
         Glyphs.clearLog()

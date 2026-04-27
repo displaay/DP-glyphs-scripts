@@ -1,5 +1,7 @@
 # MenuTitle: Decompose Corner and Cap Components
 # -*- coding: utf-8 -*-
+# Copyright (c) 2026 Displaay Type Foundry. All rights reserved.
+
 from __future__ import division, print_function, unicode_literals
 __doc__ = """
 Recreates the current paths without caps or components. Hold down SHIFT to decompose on all layers.

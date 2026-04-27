@@ -1,5 +1,7 @@
 #MenuTitle: Sidebearing manager Displaay
 # -*- coding: utf-8 -*-
+# Copyright (c) 2026 Displaay Type Foundry. All rights reserved.
+
 __doc__="""
 Sidebearing manager Displaay - Manages sidebearings, flattens derivative metrics, and handles auto-alignment.
 """

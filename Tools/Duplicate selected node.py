@@ -1,5 +1,6 @@
 # MenuTitle: Duplicate selected node
 # -*- coding: utf-8 -*-
+# Copyright (c) 2026 Displaay Type Foundry. All rights reserved.
 
 node = Layer.selection[0]
 

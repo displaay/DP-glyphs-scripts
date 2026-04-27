@@ -1,5 +1,6 @@
 # MenuTitle: Fill Up Intermediate Layers 
- # -*- coding: utf-8 -*- 
+# -*- coding: utf-8 -*-
+# Copyright (c) 2026 Displaay Type Foundry. All rights reserved.
 
 
 import itertools

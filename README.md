@@ -79,7 +79,7 @@ Most files include `# MenuTitle` metadata, so they should show up in the Glyphs 
 ### Export
 
 - `Export/Selective Variable Font Export.py`  
-  Currently stored as a macOS Alias file in this repository, not a readable Python script.
+  Exports a variable font while dropping selected axes, keeping selected named instances, and remapping chosen instances to specific `wght` values.
 
 ## Usage Notes
 
@@ -92,3 +92,9 @@ Most files include `# MenuTitle` metadata, so they should show up in the Glyphs 
 - This repo is a script collection, not a packaged Glyphs plugin.
 - Script naming reflects working file names in Glyphs workflows and may include legacy typos for compatibility.
 - There is currently no automated test suite in this repository.
+
+## License
+
+Copyright (c) 2026 Displaay Type Foundry. All rights reserved.
+
+These scripts are proprietary utility software. No license is granted for copying, redistribution, modification, or reuse outside Displaay Type Foundry workflows unless permission is provided by Displaay Type Foundry.

@@ -1,5 +1,7 @@
 #MenuTitle: Tabular Figures Spacer
 # -*- coding: utf-8 -*-
+# Copyright (c) 2026 Displaay Type Foundry. All rights reserved.
+
 __doc__="""
 Sets a fixed width for tabular figures (.tf, .tosf, etc.), with options to center, apply metrics keys, and disable component alignment.
 """

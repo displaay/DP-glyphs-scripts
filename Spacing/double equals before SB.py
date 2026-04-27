@@ -1,5 +1,7 @@
 # MenuTitle: Set == Sidebearings with Mono Check
 # -*- coding: utf-8 -*-
+# Copyright (c) 2026 Displaay Type Foundry. All rights reserved.
+
 from __future__ import division, print_function, unicode_literals
 import vanilla
 
