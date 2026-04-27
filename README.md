@@ -73,6 +73,9 @@ Most files include `# MenuTitle` metadata, so they should show up in the Glyphs 
 - `Tools/Horziontals calculator.py`  
   UI calculator for horizontal stem targets from reference stem values and optical reduction settings.
 
+- `Tools/Master Consistency Checker.py`  
+  Glyphs 3 UI preflight for master-to-master inconsistencies: shape/path compatibility, components, anchors, metrics, bounds, suspicious shape-order shifts, and a visual HTML report with per-glyph master overlays, severity levels, navigation, differences, and likely fixes.
+
 ### Export
 
 - `Export/Selective Variable Font Export.py`  
