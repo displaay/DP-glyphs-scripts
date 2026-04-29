@@ -42,6 +42,9 @@ Most files include `# MenuTitle` metadata, so they should show up in the Glyphs 
 - `Spacing/Sidebearing Manager.py`  
   Sidebearing utility with options to apply per selected glyphs/all glyphs, flatten formula-derived values, and disable auto-alignment.
 
+- `Spacing/Optical Center in Width.py`  
+  Optically centers glyph contents within the current advance width by sampling filled outline slices, with MONO-master scope, shift limits, and metric-flattening options.
+
 ### Kerning
 
 - `Kerning/Copy Kerning Exceptions to Double Accents.py`  
