@@ -7,7 +7,7 @@ import vanilla
 
 class SetDoubleEqualsMetrics(object):
 	def __init__(self):
-		self.w = vanilla.FloatingWindow((320, 190), "Set == Sidebearings")
+		self.w = vanilla.FloatingWindow((340, 220), "Set == Sidebearings")
 		
 		# UI Elements
 		self.w.allMasters = vanilla.CheckBox((15, 15, -15, 20), "Apply to all masters", value=False)
@@ -15,6 +15,8 @@ class SetDoubleEqualsMetrics(object):
 		
 		# New Mono Checkbox
 		self.w.skipMono = vanilla.CheckBox((15, 75, -15, 20), "Skip masters where Mono >= 1", value=True)
+
+		self.w.skipNegativeComponents = vanilla.CheckBox((15, 105, -15, 20), "Skip negative sidebearings in component glyphs", value=True)
 		
 		self.w.runButton = vanilla.Button((15, -45, -15, 20), "Apply '==' Metrics", callback=self.process)
 		self.w.open()
@@ -37,20 +39,25 @@ class SetDoubleEqualsMetrics(object):
 				return True
 		return False
 
-	def update_metrics(self, layer):
+	def update_metrics(self, layer, skip_negative_components=True):
+		is_component_glyph = len(layer.components) > 0
+		skip_negative_values = skip_negative_components and is_component_glyph
+
 		# Left Sidebearing
-		if layer.leftMetricsKey:
-			current_key = layer.leftMetricsKey.lstrip("=")
-			layer.leftMetricsKey = "==" + current_key
-		else:
-			layer.leftMetricsKey = "==" + str(int(layer.LSB))
+		if not (skip_negative_values and layer.LSB < 0):
+			if layer.leftMetricsKey:
+				current_key = layer.leftMetricsKey.lstrip("=")
+				layer.leftMetricsKey = "==" + current_key
+			else:
+				layer.leftMetricsKey = "==" + str(int(layer.LSB))
 			
 		# Right Sidebearing
-		if layer.rightMetricsKey:
-			current_key = layer.rightMetricsKey.lstrip("=")
-			layer.rightMetricsKey = "==" + current_key
-		else:
-			layer.rightMetricsKey = "==" + str(int(layer.RSB))
+		if not (skip_negative_values and layer.RSB < 0):
+			if layer.rightMetricsKey:
+				current_key = layer.rightMetricsKey.lstrip("=")
+				layer.rightMetricsKey = "==" + current_key
+			else:
+				layer.rightMetricsKey = "==" + str(int(layer.RSB))
 			
 		layer.syncMetrics()
 
@@ -64,6 +71,8 @@ class SetDoubleEqualsMetrics(object):
 			glyphs_to_process = font.glyphs
 		else:
 			glyphs_to_process = [l.parent for l in font.selectedLayers]
+
+		skip_negative_components = self.w.skipNegativeComponents.get()
 
 		font.disableUpdateInterface()
 		if font.parent:
@@ -80,7 +89,7 @@ class SetDoubleEqualsMetrics(object):
 						
 						# Only update if it's a master layer or a special layer
 						if layer.isMasterLayer or layer.isSpecialLayer:
-							self.update_metrics(layer)
+							self.update_metrics(layer, skip_negative_components)
 				else:
 					# Active master only
 					active_master = font.selectedFontMaster
@@ -88,7 +97,7 @@ class SetDoubleEqualsMetrics(object):
 						print("Skipping active master: Monospaced.")
 					else:
 						layer = glyph.layers[active_master.id]
-						self.update_metrics(layer)
+						self.update_metrics(layer, skip_negative_components)
 				
 		except Exception as e:
 			print(e)

@@ -31,7 +31,10 @@ Most files include `# MenuTitle` metadata, so they should show up in the Glyphs 
   Import spacing, kerning, and kerning groups from UFOs into a Glyphs source (master by master), with merge/overwrite options and metrics normalization tools.
 
 - `Spacing/double equals before SB.py`  
-  Converts sidebearings to locked `==` metrics keys (or normalizes existing keys), with options for glyph/master scope and optional MONO-axis filtering.
+  Converts sidebearings to locked `==` metrics keys (or normalizes existing keys), with options for glyph/master scope, optional MONO-axis filtering, and a default safeguard that skips negative sidebearings in component glyphs.
+
+- `Spacing/Show Auto-Aligned == Sidebearings.py`  
+  Removes negative `==` left/right sidebearing metrics keys from auto-aligned glyphs in the current master, then opens a tab with the affected glyphs.
 
 - `Spacing/Tabular Figures Spacer.py`  
   Sets fixed tabular widths (e.g. `.tf`, `.tosf`, `.tnum`) with options for centering, metrics keys, and component alignment behavior.
