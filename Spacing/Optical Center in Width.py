@@ -5,11 +5,12 @@
 from __future__ import division, print_function, unicode_literals
 
 __doc__ = """
-Optically centers selected glyphs inside their current advance width.
+Centers selected glyphs inside their current advance width.
 
 The script estimates the horizontal center of ink by sampling filled
-horizontal slices through each layer. It then shifts the layer content so
-that the measured ink balance sits on the advance-width center.
+horizontal slices through each layer. In mono workflows it keeps geometric
+centering as the priority and uses the sampled ink center only as a small
+optional nudge.
 """
 
 import vanilla
@@ -17,6 +18,8 @@ from GlyphsApp import Glyphs
 
 
 class OpticalCenterInWidth(object):
+	MAX_OPTICAL_NUDGE = 8.0
+
 	def __init__(self):
 		self.font = Glyphs.font
 		if not self.font:
@@ -26,7 +29,7 @@ class OpticalCenterInWidth(object):
 
 		self.has_mono_axis = self.get_mono_axis_index() is not None
 
-		self.w = vanilla.FloatingWindow((420, 480), "Optical Center in Width")
+		self.w = vanilla.FloatingWindow((420, 510), "Optical Center in Width")
 
 		y = 15
 		self.w.glyphScopeLabel = vanilla.TextBox((15, y, -15, 18), "Glyphs")
@@ -47,10 +50,12 @@ class OpticalCenterInWidth(object):
 		self.w.disableAutoAlignment = vanilla.CheckBox((15, y, -15, 20), "Disable component auto-alignment", value=False)
 		y += 25
 		self.w.flattenMetrics = vanilla.CheckBox((15, y, -15, 20), "Flatten LSB/RSB metrics on processed layers", value=False)
+		y += 25
+		self.w.keepMonoSidebearingsPositive = vanilla.CheckBox((15, y, -15, 20), "Avoid negative sidebearings in MONO masters", value=True)
 
 		y += 36
 		self.w.strengthLabel = vanilla.TextBox((15, y, 155, 20), "Optical strength:")
-		self.w.strengthInput = vanilla.EditText((175, y - 2, 55, 22), "100")
+		self.w.strengthInput = vanilla.EditText((175, y - 2, 55, 22), "0")
 		self.w.strengthSuffix = vanilla.TextBox((235, y, 50, 20), "%")
 
 		y += 30
@@ -112,6 +117,9 @@ class OpticalCenterInWidth(object):
 			return float(master.axes[mono_axis_index]) > 0
 		except Exception:
 			return False
+
+	def is_mono_layer(self, layer):
+		return self.is_mono_master(self.master_for_layer(layer))
 
 	def selected_glyphs(self):
 		selected_layers = list(self.font.selectedLayers or [])
@@ -236,15 +244,43 @@ class OpticalCenterInWidth(object):
 
 		return total_moment / total_length
 
-	def optical_shift_for_layer(self, layer, strength, sample_count, max_shift):
-		center_x = self.ink_center_x(layer, sample_count)
-		if center_x is None:
+	def sidebearing_center_shift(self, layer):
+		return (float(layer.RSB) - float(layer.LSB)) * 0.5
+
+	def clamp_to_positive_sidebearings(self, layer, shift):
+		left_limit = -float(layer.LSB)
+		right_limit = float(layer.RSB)
+		if left_limit > right_limit:
+			return shift
+		return max(left_limit, min(right_limit, shift))
+
+	def clamped_optical_correction(self, layer, strength, sample_count):
+		if strength <= 0:
+			return 0.0
+
+		bounds = layer.bounds
+		if bounds is None or bounds.size.width <= 0:
+			return 0.0
+		bounds_center = float(bounds.origin.x) + (float(bounds.size.width) * 0.5)
+		ink_center = self.ink_center_x(layer, sample_count)
+		if ink_center is None:
+			return 0.0
+
+		optical_correction = (bounds_center - ink_center) * strength
+		return max(-self.MAX_OPTICAL_NUDGE, min(self.MAX_OPTICAL_NUDGE, optical_correction))
+
+	def optical_shift_for_layer(self, layer, strength, sample_count, max_shift, keep_positive_sidebearings, force_sidebearing_guard):
+		bounds = layer.bounds
+		if bounds is None or bounds.size.width <= 0:
 			return None
 
-		target_x = float(layer.width) * 0.5
-		shift = (target_x - center_x) * strength
+		shift = self.sidebearing_center_shift(layer)
+		shift += self.clamped_optical_correction(layer, strength, sample_count)
+
 		if max_shift > 0:
 			shift = max(-max_shift, min(max_shift, shift))
+		if keep_positive_sidebearings and (force_sidebearing_guard or self.is_mono_layer(layer)):
+			shift = self.clamp_to_positive_sidebearings(layer, shift)
 		return shift
 
 	def disable_component_alignment(self, layer):
@@ -316,6 +352,8 @@ class OpticalCenterInWidth(object):
 		dry_run = self.w.dryRun.get()
 		flatten_metrics = self.w.flattenMetrics.get()
 		disable_alignment = self.w.disableAutoAlignment.get()
+		keep_positive_sidebearings = self.w.keepMonoSidebearingsPositive.get()
+		force_sidebearing_guard = self.w.masterScope.get() == 2
 
 		processed_layers = 0
 		shifted_layers = 0
@@ -332,12 +370,14 @@ class OpticalCenterInWidth(object):
 					if layer is None:
 						continue
 					processed_layers += 1
-					shift = self.optical_shift_for_layer(layer, strength, sample_count, max_shift)
+					shift = self.optical_shift_for_layer(layer, strength, sample_count, max_shift, keep_positive_sidebearings, force_sidebearing_guard)
 					if shift is None:
 						skipped_layers += 1
 						continue
 					if round_shifts:
 						shift = round(shift)
+					if keep_positive_sidebearings and (force_sidebearing_guard or self.is_mono_layer(layer)):
+						shift = self.clamp_to_positive_sidebearings(layer, shift)
 					if abs(shift) < min_shift:
 						continue
 

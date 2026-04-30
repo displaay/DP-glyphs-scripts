@@ -281,6 +281,36 @@ def newest_ttf_in_folder(folder_path):
 	return max(font_paths, key=os.path.getmtime)
 
 
+def font_path_with_extension(font_path, extension):
+	base_path, _old_extension = os.path.splitext(font_path)
+	return "%s.%s" % (base_path, extension)
+
+
+def save_webfont_flavors(ttf_path, flavors=("woff", "woff2")):
+	output_paths = []
+	errors = []
+	for flavor in flavors:
+		output_path = font_path_with_extension(ttf_path, flavor)
+		webfont = TTFont(ttf_path)
+		try:
+			webfont.flavor = flavor
+			webfont.save(output_path)
+			output_paths.append(output_path)
+		except Exception as error:
+			errors.append("%s: %s" % (flavor.upper(), str(error)))
+			if os.path.isfile(output_path):
+				try:
+					os.remove(output_path)
+				except Exception:
+					pass
+		finally:
+			webfont.close()
+
+	if errors:
+		raise RuntimeError("Could not export webfont format(s): %s" % "; ".join(errors))
+	return output_paths
+
+
 def analyze_feature_variations(ttfont):
 	summary = {}
 	if "fvar" not in ttfont:
@@ -1199,7 +1229,7 @@ class SelectiveVariableFontExport(object):
 			if source_font_path is None:
 				raise RuntimeError("Glyphs did not produce a TTF variable font export.")
 
-			self.postprocess_export(
+			exported_paths = self.postprocess_export(
 				source_font_path=source_font_path,
 				destination_path=destination_path,
 				axis_limits=axis_limits,
@@ -1215,8 +1245,10 @@ class SelectiveVariableFontExport(object):
 
 			Glyphs.showNotification(
 				"Selective VF Export",
-				"Exported %s" % os.path.basename(destination_path),
+				"Exported TTF, WOFF and WOFF2",
 			)
+			for exported_path in exported_paths:
+				print("Exported: %s" % exported_path)
 			self.window.close()
 		except Exception as error:
 			Glyphs.clearLog()
@@ -1444,8 +1476,11 @@ class SelectiveVariableFontExport(object):
 		output_folder = os.path.dirname(destination_path)
 		if output_folder and not os.path.isdir(output_folder):
 			os.makedirs(output_folder)
-		ttfont.save(destination_path)
-		ttfont.close()
+		try:
+			ttfont.save(destination_path)
+		finally:
+			ttfont.close()
+		return [destination_path] + save_webfont_flavors(destination_path)
 
 
 SelectiveVariableFontExport()

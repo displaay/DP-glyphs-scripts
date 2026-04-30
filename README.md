@@ -36,6 +36,9 @@ Most files include `# MenuTitle` metadata, so they should show up in the Glyphs 
 - `Spacing/Show Auto-Aligned == Sidebearings.py`  
   Removes negative `==` left/right sidebearing metrics keys from auto-aligned glyphs in the current master, then opens a tab with the affected glyphs.
 
+- `Spacing/Out of sync Metrics.py`  
+  Finds pure composite glyphs whose auto-aligned component metrics are out of sync in the current master and opens a tab with affected glyphs.
+
 - `Spacing/Tabular Figures Spacer.py`  
   Sets fixed tabular widths (e.g. `.tf`, `.tosf`, `.tnum`) with options for centering, metrics keys, and component alignment behavior.
 
@@ -43,7 +46,7 @@ Most files include `# MenuTitle` metadata, so they should show up in the Glyphs 
   Sidebearing utility with options to apply per selected glyphs/all glyphs, flatten formula-derived values, and disable auto-alignment.
 
 - `Spacing/Optical Center in Width.py`  
-  Optically centers glyph contents within the current advance width by sampling filled outline slices, with MONO-master scope, shift limits, and metric-flattening options.
+  Centers glyph contents within the current advance width by balancing LSB/RSB, with optional small sampled-ink optical correction, MONO-master scope, and sidebearing guard options.
 
 ### Kerning
 
@@ -60,12 +63,20 @@ Most files include `# MenuTitle` metadata, so they should show up in the Glyphs 
 - `Layers/Fill Up Intermediate Layers.py`  
   Generates missing intermediate/special layers for coordinate combinations and reinterpolates them.
 
+### Client Projects
+
+- `Client Projects/Add wght 400 Intermediate Layers.py`  
+  Adds wght=400 intermediate layers for selected glyphs, using each source layer's non-weight coordinates and copying outline paths from the heaviest matching weight layer.
+
 ### Background
 
 - `Background/Clear Backgrounds in Selected Layers.py`  
   UI tool to clear background paths/components/anchors in selected glyphs, with selectable layer scope.
 
 ### Tools
+
+- `Tools/Assign Private Use Unicodes.py`  
+  Assigns consecutive Basic Private Use Area Unicode values to selected glyphs, with overwrite warnings for existing Unicode values.
 
 - `Tools/Validator bypass.py`  
   Decomposes corner/cap components and rebuilds paths for selected layers; `Shift` applies to all layers in selected glyphs.
