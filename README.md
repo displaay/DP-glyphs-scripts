@@ -58,6 +58,9 @@ Most files include `# MenuTitle` metadata, so they should show up in the Glyphs 
 - `Components/Reset all corner components.py`  
   Resets corner component hint scale values to 100% (`1.0, 1.0`) across the font.
 
+- `Components/DP alignment manager.py`  
+  Floating active-glyph matrix for component auto-alignment across masters, with click-to-toggle dots and batch controls for selected masters.
+
 ### Layers
 
 - `Layers/Fill Up Intermediate Layers.py`  
