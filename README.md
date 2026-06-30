@@ -2,7 +2,7 @@
 
 A collection of utility scripts for [Glyphs](https://glyphsapp.com/) focused on spacing, kerning, component cleanup, layer utilities, export helpers, and font-production tools.
 
-These scripts run inside Glyphs on macOS — they are not standalone command-line tools.
+These scripts run inside Glyphs on macOS; they are not standalone command-line tools.
 
 ## Requirements
 
@@ -15,9 +15,9 @@ Some scripts use additional libraries:
 | Dependency | Used by |
 |---|---|
 | `vanilla` | Most UI scripts (spacing tools, kerning UI, calculators, swapper, etc.) |
-| `fontTools` | `Tools/Weight Axis Converter.py` (optional — falls back to a built-in mapper if unavailable) |
+| `fontTools` | Required by `Export/Selective Variable Font Export.py`; optional for `Tools/Weight Axis Converter.py`, which falls back to a built-in mapper if unavailable. |
 
-Scripts that use AppKit directly (no `vanilla`): `Spacing/master_spacing_and_kerning.py`, `Spacing/transfer_ufo_metrics_and_kerning.py`.
+Some larger UI scripts build their interface directly with AppKit/objc rather than `vanilla`, notably `Spacing/master_spacing_and_kerning.py` and `Spacing/transfer_ufo_metrics_and_kerning.py`.
 
 ## Installation
 
@@ -30,7 +30,7 @@ Most files include `# MenuTitle` metadata, so they show up in the Glyphs Scripts
 
 ## Script Index
 
-**23 Python scripts** across 9 folders.
+**23 Python scripts** across 8 folders.
 
 ### Spacing
 
@@ -79,35 +79,15 @@ Most files include `# MenuTitle` metadata, so they show up in the Glyphs Scripts
 
 ### Tools
 
-<<<<<<< Updated upstream
 | File | Menu title | Description |
 |---|---|---|
 | `Tools/Assign Private Use Unicodes.py` | Assign Private Use Unicodes | Assigns consecutive Basic Private Use Area Unicode values to selected glyphs, with overwrite warnings for existing Unicode values. |
 | `Tools/Validator bypass.py` | Decompose Corner and Cap Components | Decomposes corner/cap components and rebuilds paths for selected layers. Hold **Shift** to apply to all layers in selected glyphs. |
 | `Tools/Duplicate selected node.py` | Duplicate selected node | Duplicates the selected node and inserts the copy after it (line/curve nodes only). |
-| `Tools/Swapper.py` | Swapper | Two-way swap tool for glyph/layer data, including metrics and kerning, with UI controls and suffix-aware glyph matching. |
+| `Tools/DP Swapper.py` | DP Swapper | Two-way swap tool for glyph/layer data, including metrics and kerning, with UI controls and suffix-aware glyph matching. |
 | `Tools/Horziontals calculator.py` | Calculate horizontals | UI calculator for horizontal stem targets from reference stem values (Dimensions palette) and optical reduction settings. |
 | `Tools/Weight Axis Converter.py` | Weight Axis Converter | Converts axis values between Glyphs source coordinates (internal/design) and exported variable-font coordinates (external/user), including remapped instances (e.g. 550 → 500). Reads mapping points from masters, instances, and Axis Mappings custom parameters; supports any axis. |
 | `Tools/Master Consistency Checker.py` | Master Consistency Checker | Glyphs 3 UI preflight for master-to-master inconsistencies: shape/path compatibility, components, anchors, metrics, bounds, suspicious shape-order shifts, and a visual HTML report with per-glyph master overlays, severity levels, navigation, differences, and likely fixes. |
-=======
-- `Tools/Assign Private Use Unicodes.py`  
-  Assigns consecutive Basic Private Use Area Unicode values to selected glyphs, with overwrite warnings for existing Unicode values.
-
-- `Tools/Validator bypass.py`  
-  Decomposes corner/cap components and rebuilds paths for selected layers; `Shift` applies to all layers in selected glyphs.
-
-- `Tools/Duplicate selected node.py`  
-  Duplicates the selected node and inserts the copy after it.
-
-- `Tools/DP Swapper.py`  
-  Two-way swap tool for glyph/layer data (including metrics and kerning), with UI controls.
-
-- `Tools/Horziontals calculator.py`  
-  UI calculator for horizontal stem targets from reference stem values and optical reduction settings.
-
-- `Tools/Master Consistency Checker.py`  
-  Glyphs 3 UI preflight for master-to-master inconsistencies: shape/path compatibility, components, anchors, metrics, bounds, suspicious shape-order shifts, and a visual HTML report with per-glyph master overlays, severity levels, navigation, differences, and likely fixes.
->>>>>>> Stashed changes
 
 ### Export
 
