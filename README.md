@@ -1,116 +1,111 @@
 # DP Glyphs Scripts
 
-A collection of utility scripts for [Glyphs](https://glyphsapp.com/) focused on spacing, kerning, component cleanup, layer utilities, and font-production helpers.
+A collection of utility scripts for [Glyphs](https://glyphsapp.com/) focused on spacing, kerning, component cleanup, layer utilities, export helpers, and font-production tools.
 
-These scripts are intended to run inside Glyphs on macOS, not as standalone command-line tools.
+These scripts run inside Glyphs on macOS — they are not standalone command-line tools.
 
 ## Requirements
 
 - macOS
 - Glyphs 3
 - Glyphs Python environment
-- `vanilla` for scripts that open custom UI windows
+
+Some scripts use additional libraries:
+
+| Dependency | Used by |
+|---|---|
+| `vanilla` | Most UI scripts (spacing tools, kerning UI, calculators, swapper, etc.) |
+| `fontTools` | `Tools/Weight Axis Converter.py` (optional — falls back to a built-in mapper if unavailable) |
+
+Scripts that use AppKit directly (no `vanilla`): `Spacing/master_spacing_and_kerning.py`, `Spacing/transfer_ufo_metrics_and_kerning.py`.
 
 ## Installation
 
 1. Clone or download this repository.
-2. In Glyphs, open the Scripts folder via `Script > Open Scripts Folder`.
-3. Copy the script files you want into your Glyphs Scripts folder.
+2. In Glyphs, open the Scripts folder via **Script → Open Scripts Folder**.
+3. Copy the script folders (or individual files) you want into your Glyphs Scripts folder, preserving the folder structure if you prefer.
 4. Restart Glyphs (or reload scripts) so they appear in the Scripts menu.
 
-Most files include `# MenuTitle` metadata, so they should show up in the Glyphs Scripts menu with a readable label.
+Most files include `# MenuTitle` metadata, so they show up in the Glyphs Scripts menu with a readable label. Where the menu label differs from the filename, it is noted below.
 
 ## Script Index
 
+**23 Python scripts** across 9 folders.
+
 ### Spacing
 
-- `Spacing/master_spacing_and_kerning.py`  
-  Batch-adjust spacing per selected masters, with optional kerning updates and unit conversions (`Percent`, `Fixed value`, `InDesign`, `Figma`, `Web`).
-
-- `Spacing/transfer_ufo_metrics_and_kerning.py`  
-  Import spacing, kerning, and kerning groups from UFOs into a Glyphs source (master by master), with merge/overwrite options and metrics normalization tools.
-
-- `Spacing/double equals before SB.py`  
-  Converts sidebearings to locked `==` metrics keys (or normalizes existing keys), with options for glyph/master scope, optional MONO-axis filtering, and a default safeguard that skips negative sidebearings in component glyphs.
-
-- `Spacing/Show Auto-Aligned == Sidebearings.py`  
-  Removes negative `==` left/right sidebearing metrics keys from auto-aligned glyphs in the current master, then opens a tab with the affected glyphs.
-
-- `Spacing/Out of sync Metrics.py`  
-  Finds pure composite glyphs whose auto-aligned component metrics are out of sync in the current master and opens a tab with affected glyphs.
-
-- `Spacing/Tabular Figures Spacer.py`  
-  Sets fixed tabular widths (e.g. `.tf`, `.tosf`, `.tnum`) with options for centering, metrics keys, and component alignment behavior.
-
-- `Spacing/Sidebearing Manager.py`  
-  Sidebearing utility with options to apply per selected glyphs/all glyphs, flatten formula-derived values, and disable auto-alignment.
-
-- `Spacing/Optical Center in Width.py`  
-  Centers glyph contents within the current advance width by balancing LSB/RSB, with optional small sampled-ink optical correction, MONO-master scope, and sidebearing guard options.
+| File | Menu title | Description |
+|---|---|---|
+| `Spacing/master_spacing_and_kerning.py` | Master Spacing and Kerning Adjuster | Batch-adjust spacing per selected masters, with optional kerning updates and unit conversions (`Percent`, `Fixed value`, `InDesign`, `Figma`, `Web`). |
+| `Spacing/transfer_ufo_metrics_and_kerning.py` | Transfer UFO Metrics and Kerning | Import spacing, kerning, and kerning groups from UFOs into a Glyphs source (master by master), with merge/overwrite options and metrics normalization tools. |
+| `Spacing/double equals before SB.py` | Set == Sidebearings with Mono Check | Converts sidebearings to locked `==` metrics keys (or normalizes existing keys), with options for glyph/master scope, optional MONO-axis filtering, and a default safeguard that skips negative sidebearings in component glyphs. |
+| `Spacing/Show Auto-Aligned == Sidebearings.py` | Remove Negative Auto-Aligned == Sidebearings | Removes negative `==` left/right sidebearing metrics keys from auto-aligned glyphs in the current master, then opens a tab with the affected glyphs. |
+| `Spacing/Out of sync Metrics.py` | Find Out-of-Sync Auto-Aligned Glyphs | Finds pure composite glyphs whose auto-aligned component metrics are out of sync in the current master and opens a tab with affected glyphs. |
+| `Spacing/Tabular Figures Spacer.py` | Tabular Figures Spacer | Sets fixed tabular widths (e.g. `.tf`, `.tosf`, `.tnum`) with options for centering, metrics keys, and component alignment behavior. |
+| `Spacing/Sidebearing Manager.py` | Sidebearing manager Displaay | Manages LSB/RSB/width per selected or all glyphs, flattens formula-derived values, and disables auto-alignment. |
+| `Spacing/Optical Center in Width.py` | Optical Center in Width | Centers glyph contents within the current advance width by balancing LSB/RSB, with optional small sampled-ink optical correction, MONO-master scope, and sidebearing guard options. |
 
 ### Kerning
 
-- `Kerning/Copy Kerning Exceptions to Double Accents.py`  
-  Copies kerning exceptions from selected base accented glyphs to corresponding double-accent variants through a UI workflow.
+| File | Menu title | Description |
+|---|---|---|
+| `Kerning/Copy Kerning Exceptions to Double Accents.py` | Copy Kerning Exceptions to Double Accents (with UI) | Copies kerning exceptions from selected base accented glyphs (e.g. Abreve, Acircumflex) to corresponding Vietnamese/Pinyin double-accent variants. |
 
 ### Components
 
-- `Components/Reset all corner components.py`  
-  Resets corner component hint scale values to 100% (`1.0, 1.0`) across the font.
-
-- `Components/DP alignment manager.py`  
-  Floating active-glyph matrix for component auto-alignment across masters, with click-to-toggle dots and batch controls for selected masters.
+| File | Menu title | Description |
+|---|---|---|
+| `Components/Reset all corner components.py` | Reset All Corner components | Resets corner component hint scale values to 100% (`1.0, 1.0`) across the font. |
+| `Components/DP alignment manager.py` | DP alignment manager | Floating active-glyph matrix for component auto-alignment across masters, with click-to-toggle dots and batch controls for selected masters. |
 
 ### Layers
 
-- `Layers/Fill Up Intermediate Layers.py`  
-  Generates missing intermediate/special layers for coordinate combinations and reinterpolates them.
+| File | Menu title | Description |
+|---|---|---|
+| `Layers/Fill Up Intermediate Layers.py` | Fill Up Intermediate Layers | Generates missing intermediate/special layers for coordinate combinations and reinterpolates them. |
+| `Layers/Masters Side by Side.py` | Masters Side by Side | Opens a new Edit tab with selected glyphs arranged by master. Axes can be reordered by dragging; checked axes are used for sorting, unchecked axes are held at the selected layer's coordinate. |
 
 ### Client Projects
 
-- `Client Projects/Add wght 400 Intermediate Layers.py`  
-  Adds wght=400 intermediate layers for selected glyphs, using each source layer's non-weight coordinates and copying outline paths from the heaviest matching weight layer.
+| File | Menu title | Description |
+|---|---|---|
+| `Client Projects/Add wght 400 Intermediate Layers.py` | Add wght 400 Intermediate Layers | Adds wght=400 intermediate layers for selected glyphs, using each source layer's non-weight coordinates and copying outline paths from the heaviest matching weight layer. |
 
 ### Background
 
-- `Background/Clear Backgrounds in Selected Layers.py`  
-  UI tool to clear background paths/components/anchors in selected glyphs, with selectable layer scope.
+| File | Menu title | Description |
+|---|---|---|
+| `Background/Clear Backgrounds in Selected Layers.py` | Clear Backgrounds in Selected Layers... | UI tool to clear background paths, components, and anchors in selected glyphs, with selectable layer scope. |
 
 ### Tools
 
-- `Tools/Assign Private Use Unicodes.py`  
-  Assigns consecutive Basic Private Use Area Unicode values to selected glyphs, with overwrite warnings for existing Unicode values.
-
-- `Tools/Validator bypass.py`  
-  Decomposes corner/cap components and rebuilds paths for selected layers; `Shift` applies to all layers in selected glyphs.
-
-- `Tools/Duplicate selected node.py`  
-  Duplicates the selected node and inserts the copy after it.
-
-- `Tools/Swapper.py`  
-  Two-way swap tool for glyph/layer data (including metrics and kerning), with UI controls.
-
-- `Tools/Horziontals calculator.py`  
-  UI calculator for horizontal stem targets from reference stem values and optical reduction settings.
-
-- `Tools/Master Consistency Checker.py`  
-  Glyphs 3 UI preflight for master-to-master inconsistencies: shape/path compatibility, components, anchors, metrics, bounds, suspicious shape-order shifts, and a visual HTML report with per-glyph master overlays, severity levels, navigation, differences, and likely fixes.
+| File | Menu title | Description |
+|---|---|---|
+| `Tools/Assign Private Use Unicodes.py` | Assign Private Use Unicodes | Assigns consecutive Basic Private Use Area Unicode values to selected glyphs, with overwrite warnings for existing Unicode values. |
+| `Tools/Validator bypass.py` | Decompose Corner and Cap Components | Decomposes corner/cap components and rebuilds paths for selected layers. Hold **Shift** to apply to all layers in selected glyphs. |
+| `Tools/Duplicate selected node.py` | Duplicate selected node | Duplicates the selected node and inserts the copy after it (line/curve nodes only). |
+| `Tools/Swapper.py` | Swapper | Two-way swap tool for glyph/layer data, including metrics and kerning, with UI controls and suffix-aware glyph matching. |
+| `Tools/Horziontals calculator.py` | Calculate horizontals | UI calculator for horizontal stem targets from reference stem values (Dimensions palette) and optical reduction settings. |
+| `Tools/Weight Axis Converter.py` | Weight Axis Converter | Converts axis values between Glyphs source coordinates (internal/design) and exported variable-font coordinates (external/user), including remapped instances (e.g. 550 → 500). Reads mapping points from masters, instances, and Axis Mappings custom parameters; supports any axis. |
+| `Tools/Master Consistency Checker.py` | Master Consistency Checker | Glyphs 3 UI preflight for master-to-master inconsistencies: shape/path compatibility, components, anchors, metrics, bounds, suspicious shape-order shifts, and a visual HTML report with per-glyph master overlays, severity levels, navigation, differences, and likely fixes. |
 
 ### Export
 
-- `Export/Selective Variable Font Export.py`  
-  Exports a variable font while dropping selected axes, keeping selected named instances, and remapping chosen instances to specific `wght` values.
+| File | Menu title | Description |
+|---|---|---|
+| `Export/Selective Variable Font Export.py` | Selective Variable Font Export | Exports a variable font while dropping selected axes, keeping selected named instances, and remapping chosen instances to specific `wght` values. |
 
 ## Usage Notes
 
 - Back up your `.glyphs` file before running bulk operations.
-- Open Glyphs Macro Window to review logs/errors from scripts.
+- Open the Glyphs Macro Window to review logs and errors from scripts.
 - Test new workflows on a copy of your source first.
+- Several scripts operate on the current selection, current master, or frontmost font — check each script's UI before applying to the full font.
 
 ## Repository Notes
 
 - This repo is a script collection, not a packaged Glyphs plugin.
-- Script naming reflects working file names in Glyphs workflows and may include legacy typos for compatibility.
+- Script filenames reflect working names in Glyphs workflows and may include legacy typos for compatibility (e.g. `Horziontals calculator.py`, `Validator bypass.py`).
 - There is currently no automated test suite in this repository.
 
 ## License
