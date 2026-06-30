@@ -9,35 +9,8 @@ instances such as 550 → 500.
 Reads mapping points from the open font and interpolates between them.
 """
 
-import json
-import time
 import vanilla
 from GlyphsApp import Glyphs, Message, INSTANCETYPEVARIABLE
-
-LOG_PATH = "/Users/daniel/.cursor/debug-logs/debug-0675fb.log"
-
-
-def _debug_log(location, message, data, hypothesis_id, run_id="pre-fix"):
-	# #region agent log
-	try:
-		with open(LOG_PATH, "a") as log_file:
-			log_file.write(
-				json.dumps(
-					{
-						"sessionId": "0675fb",
-						"runId": run_id,
-						"hypothesisId": hypothesis_id,
-						"location": location,
-						"message": message,
-						"data": data,
-						"timestamp": int(time.time() * 1000),
-					}
-				)
-				+ "\n"
-			)
-	except Exception:
-		pass
-	# #endregion
 
 try:
 	from fontTools.varLib.models import piecewiseLinearMap
@@ -223,19 +196,6 @@ class WeightAxisConverter(object):
 		default_tag = "wght" if "wght" in self.axis_tags else self.axis_tags[0]
 		default_index = self.axis_tags.index(default_tag)
 		self.current_tag = default_tag
-		# #region agent log
-		_debug_log(
-			"Weight Axis Converter.py:__init__",
-			"axis picker init values",
-			{
-				"default_tag": default_tag,
-				"default_tag_type": type(default_tag).__name__,
-				"default_index": default_index,
-				"axis_tags": self.axis_tags,
-			},
-			"A",
-		)
-		# #endregion
 
 		window_width = 360
 		window_height = 360
@@ -264,18 +224,6 @@ class WeightAxisConverter(object):
 			sizeStyle="small",
 		)
 		self.w.axisPicker.set(default_index)
-		# #region agent log
-		_debug_log(
-			"Weight Axis Converter.py:__init__",
-			"axis picker set succeeded",
-			{
-				"selected_index": default_index,
-				"selected_tag": self.w.axisPicker.get(),
-			},
-			"A",
-			run_id="post-fix",
-		)
-		# #endregion
 		y += line_height
 
 		self.w.mappingBox = vanilla.TextEditor(
@@ -296,6 +244,7 @@ class WeightAxisConverter(object):
 			["Glyphs source (internal)", "Exported VF (external)"],
 			sizeStyle="small",
 		)
+		self.w.directionPicker.set(1)
 		y += line_height
 
 		self.w.valueLabel = vanilla.TextBox(
@@ -330,15 +279,6 @@ class WeightAxisConverter(object):
 		self.points = points
 		self.internal_to_external, self.external_to_internal = build_converters(points)
 		self.w.mappingBox.set(format_mapping_table(points))
-		# #region agent log
-		_debug_log(
-			"Weight Axis Converter.py:refresh_mapping",
-			"mapping loaded",
-			{"current_tag": self.current_tag, "point_count": len(points), "points": points},
-			"G",
-			run_id="post-fix",
-		)
-		# #endregion
 
 	def convert(self, sender=None):
 		text = self.w.valueField.get().strip()
@@ -357,20 +297,6 @@ class WeightAxisConverter(object):
 			return
 
 		source_is_internal = popup_index(self.w.directionPicker) == 0
-		# #region agent log
-		_debug_log(
-			"Weight Axis Converter.py:convert",
-			"conversion input",
-			{
-				"value": value,
-				"source_is_internal": source_is_internal,
-				"current_tag": self.current_tag,
-				"points": self.points,
-			},
-			"E",
-			run_id="post-fix",
-		)
-		# #endregion
 		try:
 			result = convert_value(
 				value,
