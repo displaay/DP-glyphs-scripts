@@ -2,12 +2,10 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) 2026 Displaay Type Foundry. All rights reserved.
 
-"""
-Batch-copy selected glyphs from one master to another:
-outlines, metrics, and master-specific kerning pair values.
-
-Note: kerning group names (left/right) are stored on the glyph and shared
-across all masters in a font, so they are not master-specific.
+__doc__ = """
+Batch-copy selected glyphs from one master to another: outlines, metrics, and
+master-specific kerning pair values. Kerning group names are shared across
+masters and are not copied.
 """
 
 from __future__ import annotations

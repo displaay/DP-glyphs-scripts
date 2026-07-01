@@ -2,6 +2,11 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) 2026 Displaay Type Foundry. All rights reserved.
 
+__doc__ = """
+Adjusts LSB and RSB (and optionally kerning) per master using percent, fixed,
+InDesign, Figma, or web units. Supports bulk adjustments and per-master preview.
+"""
+
 import traceback
 
 import objc

@@ -2,6 +2,11 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) 2026 Displaay Type Foundry. All rights reserved.
 
+__doc__ = """
+Adds wght 400 intermediate layers to selected glyphs, copying outlines from the
+heaviest source layer at each designspace coordinate.
+"""
+
 from GlyphsApp import Glyphs, GSLayer, Message
 
 

@@ -2,6 +2,12 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) 2026 Displaay Type Foundry. All rights reserved.
 
+__doc__ = """
+Calculates target horizontal stem thickness from a vertical stem and contrast
+ratio, with an optical-compensation slider. Reads reference stems from the
+Dimensions palette.
+"""
+
 import vanilla
 
 class StemCalculator(object):

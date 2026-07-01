@@ -1,6 +1,11 @@
 # MenuTitle: Find Out-of-Sync Auto-Aligned Glyphs
 # -*- coding: utf-8 -*-
 
+__doc__ = """
+Finds pure-composite glyphs whose auto-aligned sidebearings or width are out of
+sync with a fresh alignment, and opens them in a new Edit tab.
+"""
+
 font = Glyphs.font
 master_id = font.selectedFontMaster.id
 

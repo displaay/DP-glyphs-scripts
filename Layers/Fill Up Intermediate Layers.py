@@ -2,6 +2,10 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) 2026 Displaay Type Foundry. All rights reserved.
 
+__doc__ = """
+Creates missing intermediate (bracket/blend) layers for selected glyphs based on
+the axis coordinates of existing special layers.
+"""
 
 import itertools
 

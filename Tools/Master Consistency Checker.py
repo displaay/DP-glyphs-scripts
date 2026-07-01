@@ -2,9 +2,7 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) 2026 Displaay Type Foundry. All rights reserved.
 
-"""
-Master Consistency Checker for Glyphs 3.
-
+__doc__ = """
 Finds interpolation and production inconsistencies across font masters:
 outline/path compatibility, component setup, anchor names/positions, metrics,
 and suspicious shape-order/shape-shift problems.

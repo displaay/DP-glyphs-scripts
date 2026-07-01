@@ -2,6 +2,12 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) 2026 Displaay Type Foundry. All rights reserved.
 
+__doc__ = """
+Sets double-equals (==) metrics keys on left and right sidebearings. Can skip
+mono masters, apply to all glyphs/masters, and skip negative sidebearings in
+component glyphs.
+"""
+
 from __future__ import division, print_function, unicode_literals
 import vanilla
 

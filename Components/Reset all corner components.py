@@ -2,6 +2,10 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) 2026 Displaay Type Foundry. All rights reserved.
 
+__doc__ = """
+Resets all corner-component hint scales to 100% on every layer in the font.
+"""
+
 from AppKit import NSPoint
 
 font = Glyphs.font  # Get the current font

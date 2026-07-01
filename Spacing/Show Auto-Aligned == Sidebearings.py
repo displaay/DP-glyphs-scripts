@@ -2,6 +2,11 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) 2026 Displaay Type Foundry. All rights reserved.
 
+__doc__ = """
+Finds auto-aligned component glyphs with negative sidebearings that use ==
+metrics keys, clears those keys, and opens the affected glyphs in a new tab.
+"""
+
 from __future__ import division, print_function, unicode_literals
 from GlyphsApp import Glyphs, Message
 

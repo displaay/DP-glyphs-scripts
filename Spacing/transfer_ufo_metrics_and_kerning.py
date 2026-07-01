@@ -5,6 +5,11 @@
 # Uses GlyphsApp and AppKit only.
 # vanilla was removed because it caused environment issues.
 
+__doc__ = """
+Imports spacing, kerning, and kerning groups from external UFO files into
+matching Glyphs masters, with per-master assignment and transfer options.
+"""
+
 import os
 import plistlib
 import traceback

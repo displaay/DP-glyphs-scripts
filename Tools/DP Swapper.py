@@ -2,9 +2,9 @@
 # MenuTitle: DP Swapper
 # Copyright (c) 2026 Displaay Type Foundry. All rights reserved.
 
-"""
-DP Swapper.py - Glyphs 3 Script
-Performs a TRUE two-way swap of layers, metrics, and kerning between a source set and a target set.
+__doc__ = """
+Performs a two-way swap of layers, metrics, and kerning between a source set
+and a target set (e.g. stylistic sets or masters).
 """
 
 from __future__ import annotations
