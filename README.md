@@ -4,6 +4,12 @@ A collection of utility scripts for [Glyphs](https://glyphsapp.com/) focused on 
 
 These scripts run inside Glyphs on macOS; they are not standalone command-line tools.
 
+## Plugins
+
+| Plugin | Description |
+|---|---|
+| [`Plugins/VFPreview.glyphsReporter`](Plugins/VFPreview.glyphsReporter/README.md) | Live variable-font interpolation preview with axis sliders, master involvement charts, standalone window, and measurement tools. Install by copying the bundle to `~/Library/Application Support/Glyphs/Plugins/`. |
+
 ## Requirements
 
 - macOS
