@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>plugin</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.ViktorRubenko.FastScripts</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>FastScripts</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.2</string>
+	<key>CFBundleVersion</key>
+	<string>260702</string>
+	<key>UpdateFeedURL</key>
+	<string>https://github.com/ViktorRubenko/FastScripts/blob/master/FastScripts.glyphsPalette/Contents/Info.plist</string>
+	<key>productPageURL</key>
+	<string>https://github.com/ViktorRubenko/FastScripts</string>
+	<key>productReleaseNotes</key>
+	<string>Add drag handle sorting for palette scripts.</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright, Viktor Rubenko, TypeType, 2021</string>
+	<key>NSPrincipalClass</key>
+	<string>FastScripts</string>
+	<key>PyMainFileNames</key>
+	<array>
+		<string>plugin.py</string>
+	</array>
+</dict>
+</plist>
