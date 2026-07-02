@@ -253,8 +253,7 @@ static NSArray *DPVFShapeArray(id proxy) {
 	CGFloat width = MAX(cursor, 1.0);
 	CGFloat height = MAX(ascender - descender, 1.0);
 	CGFloat padding = 12.0;
-	CGFloat scale = MIN((self.bounds.size.width - padding * 2.0) / width,
-						(self.bounds.size.height - padding * 2.0) / height) * 0.95;
+	CGFloat scale = ((self.bounds.size.height - padding * 2.0) / height) * 0.95;
 	if (scale <= 0.0) {
 		return;
 	}
@@ -330,38 +329,46 @@ static NSArray *DPVFShapeArray(id proxy) {
 	CGFloat previewHeight = 92.0;
 	CGFloat rowHeight = 30.0;
 	CGFloat height = 16.0 + previewHeight + 12.0 + count * rowHeight + 14.0;
+	CGFloat controlsTop = count * rowHeight + 30.0;
+	CGFloat topMargin = 12.0;
 
 	if (!self.panel) {
 		self.panel = [[NSPanel alloc] initWithContentRect:NSMakeRect(180, 180, width, height)
-												styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskUtilityWindow | NSWindowStyleMaskNonactivatingPanel
+												styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskUtilityWindow | NSWindowStyleMaskNonactivatingPanel | NSWindowStyleMaskResizable
 												  backing:NSBackingStoreBuffered
 													defer:NO];
 		self.panel.title = @"VF Preview";
 		self.panel.floatingPanel = YES;
 		self.panel.hidesOnDeactivate = NO;
+		self.panel.minSize = NSMakeSize(420.0, controlsTop + 64.0);
 	}
 	else {
 		NSRect frame = self.panel.frame;
 		frame.origin.y += frame.size.height - height;
 		frame.size = NSMakeSize(width, height);
 		[self.panel setFrame:frame display:NO];
+		self.panel.styleMask = self.panel.styleMask | NSWindowStyleMaskResizable;
+		self.panel.minSize = NSMakeSize(420.0, controlsTop + 64.0);
 	}
 
 	NSView *content = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, width, height)];
+	content.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
 	self.panel.contentView = content;
 
-	self.previewView = [[DPVFPreviewView alloc] initWithFrame:NSMakeRect(12, height - previewHeight - 12, width - 24, previewHeight)];
+	self.previewView = [[DPVFPreviewView alloc] initWithFrame:NSMakeRect(12, controlsTop, width - 24, height - controlsTop - topMargin)];
 	self.previewView.plugin = self.plugin;
+	self.previewView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
 	[content addSubview:self.previewView];
 
 	[self.sliders removeAllObjects];
 	[self.labels removeAllObjects];
 	[self.values removeAllObjects];
-	CGFloat y = height - previewHeight - 24.0 - rowHeight;
+	CGFloat y = count * rowHeight;
 	for (NSUInteger index = 0; index < count; index++) {
 		DPVFAxisRow *row = index < rows.count ? rows[index] : nil;
 		NSTextField *label = [NSTextField labelWithString:row ? row.name : @"No variable axes"];
 		label.frame = NSMakeRect(12, y + 6, 120, 18);
+		label.autoresizingMask = NSViewMaxYMargin;
 		[content addSubview:label];
 		[self.labels addObject:label];
 
@@ -373,12 +380,14 @@ static NSArray *DPVFShapeArray(id proxy) {
 		slider.action = @selector(sliderChanged:);
 		slider.tag = (NSInteger)index;
 		slider.enabled = row != nil;
+		slider.autoresizingMask = NSViewWidthSizable | NSViewMaxYMargin;
 		[content addSubview:slider];
 		[self.sliders addObject:slider];
 
 		NSTextField *value = [NSTextField labelWithString:@"0"];
 		value.alignment = NSTextAlignmentRight;
 		value.frame = NSMakeRect(width - 82, y + 6, 70, 18);
+		value.autoresizingMask = NSViewMinXMargin | NSViewMaxYMargin;
 		[content addSubview:value];
 		[self.values addObject:value];
 		y -= rowHeight;
@@ -1188,7 +1197,7 @@ static NSArray *DPVFShapeArray(id proxy) {
 		[[NSColor colorWithCalibratedRed:0.18 green:0.42 blue:0.88 alpha:0.40] setFill];
 	}
 	[frame.bezierPath fill];
-	if (self.showNodes) {
+	if (self.showNodes && !forPanel) {
 		[self drawNodeOverlaysForFrame:frame scale:scale];
 	}
 }
