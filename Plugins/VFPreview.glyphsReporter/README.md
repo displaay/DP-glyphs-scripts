@@ -2,77 +2,107 @@
 
 Glyphs 3 reporter plugin for live variable-font interpolation preview.
 
-Inspired by [Variable Font Preview 3](https://markfromberg.com/projects/variable-font-preview-3), implemented as an open Python plugin using the Glyphs SDK.
+This v1 build uses a native Objective-C reporter bundle for the live preview path: axis sliders, Edit-view overlay drawing, preview text, nodes, center preview, and hide-foreground drawing are handled by the `VFPreview` executable in `Contents/MacOS/`.
+
+## Runtime Requirements
+
+- Glyphs 3
+- macOS frameworks provided by the system: Cocoa, CoreText, CoreGraphics, QuartzCore, Foundation, AppKit, CoreFoundation, libobjc, and libSystem
+- `GlyphsCore.framework`, loaded from Glyphs at runtime through the bundle rpath
+
+There is no Python, Vanilla, pip, Homebrew, or third-party runtime dependency for the native entrypoint.
 
 ## Install
 
-1. Copy or symlink `VFPreview.glyphsReporter` to:
+1. Copy `VFPreview.glyphsReporter` to:
    `~/Library/Application Support/Glyphs 3/Plugins/`
-   (Glyphs 2 uses `~/Library/Application Support/Glyphs/Plugins/` instead.)
-2. Double-click the bundle to register it (or restart Glyphs).
-3. Enable **View → VF Preview** (shortcut: Control-Option-Command-V).
-
-Requires Glyphs 3.2+ for `internalAxesValues` / `externalAxesValues`.
+2. Restart Glyphs.
+3. Enable **View > VF Preview**.
 
 ## Usage
 
-When the reporter is active, a **VF Preview** panel opens and docks to the top of the Glyphs window:
+When the reporter is active, a **VF Preview** panel opens with:
 
-1. **Preview bar** — shows the current Edit-tab string at interpolated coordinates.
-2. **Axis sliders** — compact rows below (label, slider, value) for each axis.
+- A live preview text field using the current Edit-tab string
+- Continuous axis sliders
+- Toggles for Edit-view drawing, nodes, centering, and hiding the foreground
 
-Moving a slider updates the preview bar and (when **Draw in Edit View** is on) the Edit view overlay.
-
-You can drag the panel if needed; it repositions when you switch tabs or resize the window.
-
-Use right-click in the Edit view for master/instance jumps and display options.
-
-- **Make Instance** creates a new export instance from the current slider setup.
-- Right-click in the Edit view for VF Preview context menu actions.
-
-### Options
-
-| Option | Description |
-|--------|-------------|
-| Draw in Edit View | Overlay preview in the Edit tab |
-| Center Preview | Center interpolated outline in glyph bounds |
-| Link to Master | Sliders follow the selected master |
-| Involved Masters | Color-coded master overlays |
-| Preview Nodes | Show nodes and tangents on preview |
-| Hide Foreground | Hide active layer outlines |
-| Measurements | H/V distance and angle for 2 selected nodes |
-
-### Preview modes
-
-- **Current Glyph** — active glyph only in Edit view overlay
-- **Full Text** — all visible text in the Edit tab (overlay)
-- **Current Line** — inactive glyphs in the Edit tab (same line)
-
-The preview bar always shows the full Edit-tab string.
+Dragging an axis slider updates the Edit-view overlay and preview panel during the drag. Editing the source glyph or changing the Edit-tab text invalidates the native preview cache and redraws from current Glyphs data.
 
 ## Architecture
 
 ```
-Contents/Resources/
-  plugin.py              ReporterPlugin entry, opens dock panel on activate
-  dock_panel.py          VFP-style floating panel (fixed layout, reliable sliders)
-  preview_bar.py         TextPreviewBarView for tab-string preview
-  controller.py          Axis state, GSInstance, interpolation proxy
-  preview_view.py        Drawing helpers + standalone window
-  charts.py              Master influence bar/radar charts
-  measure.py             Two-node measurement overlay
-  axis_utils.py          Axis value helpers
+Contents/
+  Info.plist             Native Glyphs reporter bundle entrypoint
+  MacOS/
+    VFPreview            Native Objective-C reporter executable
 ```
 
-## Test checklist
+`Info.plist` uses:
 
-- [ ] VF Preview panel opens at top of Glyphs window with visible sliders
-- [ ] Preview bar shows tab text; sliders update preview and Edit view overlay
-- [ ] Bracket trick glyph swaps at threshold
-- [ ] Virtual master font previews correctly
-- [ ] Instance preview + Make Instance
-- [ ] Two-node measurement updates while sliding
-- [ ] Spacebar hides overlay; preferences persist across sessions
+- `CFBundleExecutable = VFPreview`
+- `NSPrincipalClass = DPVFPreview`
+
+The shipped bundle does not include the legacy Python implementation or its old loader. Historical Python reference files are kept outside the distributable bundle under `Plugins/VFPreviewPythonReference/`.
+
+## Build
+
+Build from the repository root:
+
+```sh
+make -C Plugins/VFPreviewNative clean all
+```
+
+Build requirements:
+
+- Xcode Command Line Tools `clang`
+- Glyphs 3 installed at `/Applications/Glyphs 3.app` for build-time GlyphsCore headers/framework lookup
+
+The Makefile writes the universal macOS bundle executable to:
+
+```text
+Plugins/VFPreview.glyphsReporter/Contents/MacOS/VFPreview
+```
+
+## Sharing Checklist
+
+Before sharing the plugin externally:
+
+```sh
+make -C Plugins/VFPreviewNative clean all
+file Plugins/VFPreview.glyphsReporter/Contents/MacOS/VFPreview
+otool -L Plugins/VFPreview.glyphsReporter/Contents/MacOS/VFPreview
+plutil -p Plugins/VFPreview.glyphsReporter/Contents/Info.plist
+make -C Plugins/VFPreviewNative dist
+```
+
+Expected dynamic libraries are only system frameworks plus `@rpath/GlyphsCore.framework/Versions/A/GlyphsCore`.
+
+The `dist` target writes `dist/VFPreview.glyphsReporter.zip` with resource forks and extended attributes omitted.
+
+The checked-in binary is ad-hoc/linker signed, not Developer ID notarized. That is suitable for direct Glyphs plugin-folder installation, but a public macOS download may still need Developer ID signing and notarization depending on the distribution channel.
+
+## Current Scope
+
+Implemented in the native v1 core:
+
+- Continuous axis-slider redraw
+- Live Edit-view overlay
+- Live preview-panel text
+- Native compatible-outline interpolation
+- Recursive compatible component preview
+- Node and tangent drawing from the same interpolated frame
+- Center preview and hide foreground
+- GlyphsCore fallback for complex/special cases
+
+Deferred from v1:
+
+- Charts
+- MIDI and external controller hooks
+- Rich context menu actions
+- Measurements
+- Make-instance UI
+- Exported-font/CoreText preview mode
 
 ## License
 

@@ -1,8 +1,7 @@
 .DS_Store
 
-# VF Preview native build (local Objective-C source + compiled binary)
-Plugins/VFPreviewNative/
-Plugins/VFPreview.glyphsReporter/Contents/MacOS/VFPreview
+# Local package artifacts
+dist/
 
 # Python bytecode
 __pycache__/
