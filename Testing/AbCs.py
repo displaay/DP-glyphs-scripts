@@ -9,7 +9,19 @@ Opens a compact Latin proofing set in the current Edit tab, or in a new tab if
 no Edit tab is open.
 """
 
+import os
+import sys
+
 from GlyphsApp import Glyphs, Message
+
+try:
+	SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+	if SCRIPT_DIR not in sys.path:
+		sys.path.insert(0, SCRIPT_DIR)
+except Exception:
+	pass
+
+from _stylistic_variants import text_with_stylistic_variants
 
 
 SCRIPT_NAME = "AbCs"
@@ -85,7 +97,7 @@ def main():
 	if font is None:
 		Message(title=SCRIPT_NAME, message="Open a font and run the script again.")
 		return
-	show_text(font, PROOF_TEXT)
+	show_text(font, text_with_stylistic_variants(font, PROOF_TEXT))
 
 
 main()

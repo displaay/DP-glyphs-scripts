@@ -11,8 +11,19 @@ testing.
 """
 
 import random
+import os
+import sys
 
 from GlyphsApp import Glyphs, Message
+
+try:
+	SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+	if SCRIPT_DIR not in sys.path:
+		sys.path.insert(0, SCRIPT_DIR)
+except Exception:
+	pass
+
+from _stylistic_variants import text_with_stylistic_variants
 
 
 SCRIPT_NAME = "English text"
@@ -189,7 +200,7 @@ def main():
 	if font is None:
 		Message(title=SCRIPT_NAME, message="Open a font and run the script again.")
 		return
-	show_text(font, random_variant())
+	show_text(font, text_with_stylistic_variants(font, random_variant()))
 
 
 main()
