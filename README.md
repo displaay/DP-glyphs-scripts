@@ -36,7 +36,7 @@ Most files include `# MenuTitle` metadata, so they show up in the Glyphs Scripts
 
 ## Script Index
 
-**24 Python scripts** across 8 folders.
+**25 Python scripts** across 8 folders.
 
 ### Spacing
 
@@ -95,6 +95,7 @@ Most files include `# MenuTitle` metadata, so they show up in the Glyphs Scripts
 | `Tools/Horziontals calculator.py` | Calculate horizontals | UI calculator for horizontal stem targets from reference stem values (Dimensions palette) and optical reduction settings. |
 | `Tools/Weight Axis Converter.py` | Weight Axis Converter | Converts axis values between Glyphs source coordinates (internal/design) and exported variable-font coordinates (external/user), including remapped instances (e.g. 550 → 500). Reads mapping points from masters, instances, and Axis Mappings custom parameters; supports any axis. |
 | `Tools/Master Consistency Checker.py` | Master Consistency Checker | Glyphs 3 UI preflight for master-to-master inconsistencies: shape/path compatibility, components, anchors, metrics, bounds, suspicious shape-order shifts, and a visual HTML report with per-glyph master overlays, severity levels, navigation, differences, and likely fixes. |
+| `Tools/CALT Contextual Cycling Generator.py` | CALT Contextual Cycling Generator | Builds synchronized OpenType classes and a `calt` feature for cycling through suffixed alternates. Supports consecutive cycling, consonant/vowel gap cycling, and multi-lookup offset chaining, with optional fallback to base glyphs when alternates are missing. |
 
 ### Export
 
