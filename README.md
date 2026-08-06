@@ -8,12 +8,14 @@ These scripts run inside Glyphs on macOS; they are not standalone command-line t
 
 | Plugin | Description |
 |---|---|
+| [`Plugins/ScriptBoard.glyphsPalette`](Plugins/ScriptBoard.glyphsPalette/README.md) | Glyphs 4 right-Palette launcher for favorite installed scripts, with search, ordering, persistence, and conflict-checked shortcuts. |
 | [`Plugins/VFPreview.glyphsReporter`](Plugins/VFPreview.glyphsReporter/README.md) | Live variable-font interpolation preview with axis sliders, master involvement charts, standalone window, and measurement tools. Install by copying the bundle to `~/Library/Application Support/Glyphs/Plugins/`. |
 
 ## Requirements
 
 - macOS
-- Glyphs 3
+- Glyphs 3 for the existing scripts and VF Preview
+- Glyphs 4.0.1 or later for Script Board
 - Glyphs Python environment
 
 Some scripts use additional libraries:
