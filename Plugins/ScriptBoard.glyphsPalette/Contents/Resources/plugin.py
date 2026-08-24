@@ -55,6 +55,13 @@ from Foundation import NSNotificationCenter
 from GlyphsApp import Glyphs
 from GlyphsApp.plugins import PalettePlugin
 
+try:
+    from AppKit import NSFontWeightRegular, NSFontWidthCondensed
+except ImportError:
+    # Width-aware system fonts arrived after the original system-font API.
+    NSFontWeightRegular = 0.0
+    NSFontWidthCondensed = -0.2
+
 from scriptboard.core import (
     SUPPORTED_MODIFIERS,
     catalog_identity,
@@ -111,6 +118,19 @@ def _palette_view_class():
     except Exception:
         # Keeps imports and unit tests independent from a running Glyphs app.
         return NSView
+
+
+def _script_title_font(size=11):
+    """Return the native condensed system font, with a compatibility fallback."""
+
+    if hasattr(NSFont, "systemFontOfSize_weight_width_"):
+        try:
+            return NSFont.systemFontOfSize_weight_width_(
+                size, NSFontWeightRegular, NSFontWidthCondensed
+            )
+        except Exception:
+            pass
+    return NSFont.systemFontOfSize_(size)
 
 
 class ScriptBoard(PalettePlugin):
@@ -523,7 +543,7 @@ class ScriptBoard(PalettePlugin):
             cell.setIdentifier_(identifier)
             title = NSTextField.labelWithString_("")
             title.setFrame_(NSMakeRect(5, 5, 112, 16))
-            title.setFont_(NSFont.systemFontOfSize_(11))
+            title.setFont_(_script_title_font())
             title.setLineBreakMode_(NSLineBreakByTruncatingMiddle)
             title.setAutoresizingMask_(NSViewWidthSizable)
             title.setTag_(201)
