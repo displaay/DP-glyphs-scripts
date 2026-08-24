@@ -42,7 +42,10 @@ letting Glyphs install it preserves macOS security metadata.
 Drag rows to reorder them. Right-click a row to run, reveal, inspect, remove,
 or assign a shortcut. Drag the divider below Script Board to resize it
 vertically; Glyphs remembers the chosen height across launches. The Palette
-gear menu contains refresh and reset actions.
+gear menu contains refresh and reset actions. Script names keep the standard
+system-font width when they fit and narrow progressively only when the current
+Palette width requires it. Widths recalculate as the Palette changes; names
+that still exceed the readable compression limit truncate at the trailing edge.
 
 ## Shortcuts
 

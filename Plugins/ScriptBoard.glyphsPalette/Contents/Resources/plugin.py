@@ -25,10 +25,11 @@ from AppKit import (
     NSEventModifierFlagOption,
     NSEventModifierFlagShift,
     NSFont,
+    NSFontAttributeName,
     NSImage,
     NSImageNameAddTemplate,
     NSImageNameRefreshTemplate,
-    NSLineBreakByTruncatingMiddle,
+    NSLineBreakByTruncatingTail,
     NSMakeRect,
     NSMenu,
     NSMenuItem,
@@ -44,6 +45,7 @@ from AppKit import (
     NSUserDefaults,
     NSView,
     NSViewHeightSizable,
+    NSViewFrameDidChangeNotification,
     NSViewMaxXMargin,
     NSViewMaxYMargin,
     NSViewMinXMargin,
@@ -51,16 +53,21 @@ from AppKit import (
     NSViewWidthSizable,
     NSWorkspace,
 )
-from Foundation import NSNotificationCenter
+from Foundation import NSAttributedString, NSNotificationCenter
 from GlyphsApp import Glyphs
 from GlyphsApp.plugins import PalettePlugin
 
 try:
-    from AppKit import NSFontWeightRegular, NSFontWidthCondensed
+    from AppKit import (
+        NSFontWeightRegular,
+        NSFontWidthCompressed,
+        NSFontWidthStandard,
+    )
 except ImportError:
     # Width-aware system fonts arrived after the original system-font API.
     NSFontWeightRegular = 0.0
-    NSFontWidthCondensed = -0.2
+    NSFontWidthCompressed = -0.3
+    NSFontWidthStandard = 0.0
 
 from scriptboard.core import (
     SUPPORTED_MODIFIERS,
@@ -87,6 +94,8 @@ DEFAULT_HEIGHT = 164
 MAX_HEIGHT = 520
 FOOTER_BUTTON_RESIZING_MASK = NSViewMaxXMargin | NSViewMaxYMargin
 FOOTER_LABEL_RESIZING_MASK = NSViewWidthSizable | NSViewMaxYMargin
+SCRIPT_TITLE_FONT_SIZE = 11
+SCRIPT_TITLE_FIT_STEPS = 8
 
 
 def _alert(message, informative="", style=None):
@@ -120,17 +129,89 @@ def _palette_view_class():
         return NSView
 
 
-def _script_title_font(size=11):
-    """Return the native condensed system font, with a compatibility fallback."""
+def _script_title_font(size=SCRIPT_TITLE_FONT_SIZE, width=NSFontWidthStandard):
+    """Return the native system font at a requested variable width."""
 
     if hasattr(NSFont, "systemFontOfSize_weight_width_"):
         try:
             return NSFont.systemFontOfSize_weight_width_(
-                size, NSFontWeightRegular, NSFontWidthCondensed
+                size, NSFontWeightRegular, width
             )
         except Exception:
             pass
     return NSFont.systemFontOfSize_(size)
+
+
+def _script_title_text_width(text, font):
+    attributed = NSAttributedString.alloc().initWithString_attributes_(
+        str(text), {NSFontAttributeName: font}
+    )
+    return float(attributed.size().width)
+
+
+def _fitted_script_title_font(
+    text,
+    available_width,
+    size=SCRIPT_TITLE_FONT_SIZE,
+    font_factory=None,
+    measure=None,
+):
+    """Use the widest system-font width that fits the complete script name."""
+
+    font_factory = font_factory or _script_title_font
+    measure = measure or _script_title_text_width
+    standard_width = float(NSFontWidthStandard)
+    minimum_width = float(NSFontWidthCompressed)
+    standard_font = font_factory(size, standard_width)
+    if not text or available_width <= 0:
+        return standard_font
+    try:
+        if measure(text, standard_font) <= available_width:
+            return standard_font
+    except Exception:
+        return standard_font
+
+    minimum_font = font_factory(size, minimum_width)
+    if measure(text, minimum_font) > available_width:
+        return minimum_font
+
+    fitting_width = minimum_width
+    fitting_font = minimum_font
+    overflowing_width = standard_width
+    for _ in range(SCRIPT_TITLE_FIT_STEPS):
+        candidate_width = (fitting_width + overflowing_width) / 2.0
+        candidate_font = font_factory(size, candidate_width)
+        if measure(text, candidate_font) <= available_width:
+            fitting_width = candidate_width
+            fitting_font = candidate_font
+        else:
+            overflowing_width = candidate_width
+    return fitting_font
+
+
+def _script_row_layout(row_width, shortcut_text):
+    """Return title and shortcut geometry for the available table-row width."""
+
+    inset = 5
+    shortcut_width = 43 if shortcut_text else 0
+    shortcut_gap = 4 if shortcut_text else 0
+    title_width = max(
+        0, float(row_width) - (2 * inset) - shortcut_gap - shortcut_width
+    )
+    shortcut_x = max(inset, float(row_width) - inset - shortcut_width)
+    return title_width, shortcut_x, shortcut_width
+
+
+def _configure_script_title_field(title):
+    """Keep long script names on one line and use the full title frame."""
+
+    title.setLineBreakMode_(NSLineBreakByTruncatingTail)
+    if hasattr(title, "setMaximumNumberOfLines_"):
+        title.setMaximumNumberOfLines_(1)
+    cell = title.cell()
+    cell.setWraps_(False)
+    cell.setScrollable_(True)
+    cell.setUsesSingleLineMode_(True)
 
 
 class ScriptBoard(PalettePlugin):
@@ -162,6 +243,12 @@ class ScriptBoard(PalettePlugin):
             self.scriptMenuReloaded_,
             SCRIPT_MENU_RELOADED_NOTIFICATION,
             None,
+        )
+        center.addObserver_selector_name_object_(
+            self,
+            self.scriptBoardFrameChanged_,
+            NSViewFrameDidChangeNotification,
+            self.scroll,
         )
         self._install_script_board_menu()
         self._refresh_catalog()
@@ -230,6 +317,7 @@ class ScriptBoard(PalettePlugin):
         self.table.setAction_("runSelectedScript:")
         self.table.registerForDraggedTypes_([ROW_PASTEBOARD_TYPE])
         self.table.setDraggingSourceOperationMask_forLocal_(1 << 4, True)
+        self.scroll_width = None
 
         self.context_menu = NSMenu.alloc().initWithTitle_("Script Board")
         self.context_menu.setDelegate_(self)
@@ -241,6 +329,7 @@ class ScriptBoard(PalettePlugin):
         self.scroll.setBorderType_(0)
         self.scroll.setDocumentView_(self.table)
         self.scroll.setAutoresizingMask_(NSViewWidthSizable | NSViewHeightSizable)
+        self.scroll.setPostsFrameChangedNotifications_(True)
         self.dialog.addSubview_(self.scroll)
 
         self.empty_label = NSTextField.labelWithString_(
@@ -461,6 +550,16 @@ class ScriptBoard(PalettePlugin):
         )
         self._rebuild_board_menu()
 
+    @objc.typedSelector(b"v@:@")
+    def scriptBoardFrameChanged_(self, notification):
+        """Refit title widths when Glyphs changes the Palette sidebar width."""
+
+        width = float(self.scroll.contentSize().width)
+        if self.scroll_width is not None and abs(width - self.scroll_width) < 0.5:
+            return
+        self.scroll_width = width
+        self.table.reloadData()
+
     @objc.python_method
     def _rebuild_board_menu(self):
         if not hasattr(self, "_board_menu"):
@@ -539,12 +638,15 @@ class ScriptBoard(PalettePlugin):
         identifier = "ScriptBoardCell"
         cell = table_view.makeViewWithIdentifier_owner_(identifier, self)
         if cell is None:
-            cell = NSTableCellView.alloc().initWithFrame_(NSMakeRect(0, 0, 164, 25))
+            row_width = table_column.width()
+            cell = NSTableCellView.alloc().initWithFrame_(
+                NSMakeRect(0, 0, row_width, 25)
+            )
             cell.setIdentifier_(identifier)
             title = NSTextField.labelWithString_("")
-            title.setFrame_(NSMakeRect(5, 5, 112, 16))
+            title.setFrame_(NSMakeRect(5, 5, max(0, row_width - 10), 16))
             title.setFont_(_script_title_font())
-            title.setLineBreakMode_(NSLineBreakByTruncatingMiddle)
+            _configure_script_title_field(title)
             title.setAutoresizingMask_(NSViewWidthSizable)
             title.setTag_(201)
             cell.addSubview_(title)
@@ -561,8 +663,21 @@ class ScriptBoard(PalettePlugin):
         item = self._state["items"][row]
         resolved = self._resolved_entry(item)
         title = item["title"] if resolved is not None else item["title"] + " — Missing"
-        cell.viewWithTag_(201).setStringValue_(title)
-        cell.viewWithTag_(202).setStringValue_(display_shortcut(item.get("shortcut")))
+        shortcut_text = display_shortcut(item.get("shortcut"))
+        row_width = cell.bounds().size.width
+        title_width, shortcut_x, shortcut_width = _script_row_layout(
+            row_width, shortcut_text
+        )
+
+        title_view = cell.viewWithTag_(201)
+        title_view.setFrame_(NSMakeRect(5, 5, title_width, 16))
+        title_view.setStringValue_(title)
+        title_view.setFont_(_fitted_script_title_font(title, title_width))
+
+        shortcut_view = cell.viewWithTag_(202)
+        shortcut_view.setFrame_(NSMakeRect(shortcut_x, 5, shortcut_width, 16))
+        shortcut_view.setStringValue_(shortcut_text)
+        shortcut_view.setHidden_(not bool(shortcut_text))
         cell.setToolTip_(item.get("absolute_path", ""))
         return cell
 

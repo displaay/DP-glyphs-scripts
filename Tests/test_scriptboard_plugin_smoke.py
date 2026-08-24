@@ -61,19 +61,19 @@ class PluginSmokeTests(unittest.TestCase):
     def test_palette_view_has_safe_non_glyphs_fallback(self):
         self.assertTrue(issubclass(plugin._palette_view_class(), NSObject))
 
-    def test_script_title_font_prefers_condensed_system_width(self):
-        class CondensedFont:
+    def test_script_title_font_uses_requested_system_width(self):
+        class VariableFont:
             @classmethod
             def systemFontOfSize_weight_width_(cls, size, weight, width):
-                return ("condensed", size, weight, width)
+                return ("variable", size, weight, width)
 
         original = plugin.NSFont
-        plugin.NSFont = CondensedFont
+        plugin.NSFont = VariableFont
         try:
-            font = plugin._script_title_font()
-            self.assertEqual(font[0], "condensed")
+            font = plugin._script_title_font(width=-0.125)
+            self.assertEqual(font[0], "variable")
             self.assertEqual(font[1], 11)
-            self.assertEqual(font[3], plugin.NSFontWidthCondensed)
+            self.assertEqual(font[3], -0.125)
         finally:
             plugin.NSFont = original
 
@@ -89,6 +89,81 @@ class PluginSmokeTests(unittest.TestCase):
             self.assertEqual(plugin._script_title_font(), ("regular", 11))
         finally:
             plugin.NSFont = original
+
+    def test_short_script_name_keeps_standard_width(self):
+        font = plugin._fitted_script_title_font(
+            "Short Name",
+            120,
+            font_factory=lambda size, width: width,
+            measure=lambda text, width: 100 * (1 + width),
+        )
+        self.assertEqual(font, plugin.NSFontWidthStandard)
+
+    def test_overflowing_script_name_uses_only_the_width_needed(self):
+        font = plugin._fitted_script_title_font(
+            "Moderately Long Name",
+            85,
+            font_factory=lambda size, width: width,
+            measure=lambda text, width: 100 * (1 + width),
+        )
+        self.assertAlmostEqual(font, -0.15, places=2)
+        self.assertGreater(font, plugin.NSFontWidthCompressed)
+
+    def test_extremely_long_script_name_stops_at_readable_width(self):
+        font = plugin._fitted_script_title_font(
+            "Extremely Long Script Name",
+            50,
+            font_factory=lambda size, width: width,
+            measure=lambda text, width: 100 * (1 + width),
+        )
+        self.assertEqual(font, plugin.NSFontWidthCompressed)
+
+    def test_script_row_title_uses_full_width_without_shortcut(self):
+        title_width, shortcut_x, shortcut_width = plugin._script_row_layout(164, "")
+        self.assertEqual(title_width, 154)
+        self.assertEqual(shortcut_x, 159)
+        self.assertEqual(shortcut_width, 0)
+
+    def test_script_row_reserves_space_only_for_visible_shortcut(self):
+        title_width, shortcut_x, shortcut_width = plugin._script_row_layout(
+            164, "⇧⌘A"
+        )
+        self.assertEqual(title_width, 107)
+        self.assertEqual(shortcut_x, 116)
+        self.assertEqual(shortcut_width, 43)
+
+    def test_script_title_is_configured_as_nonwrapping_single_line(self):
+        class Cell:
+            def setWraps_(self, value):
+                self.wraps = value
+
+            def setScrollable_(self, value):
+                self.scrollable = value
+
+            def setUsesSingleLineMode_(self, value):
+                self.single_line = value
+
+        class Title:
+            def __init__(self):
+                self.text_cell = Cell()
+
+            def setLineBreakMode_(self, value):
+                self.line_break = value
+
+            def setMaximumNumberOfLines_(self, value):
+                self.maximum_lines = value
+
+            def cell(self):
+                return self.text_cell
+
+        title = Title()
+        plugin._configure_script_title_field(title)
+
+        self.assertEqual(title.line_break, plugin.NSLineBreakByTruncatingTail)
+        self.assertEqual(title.maximum_lines, 1)
+        self.assertFalse(title.text_cell.wraps)
+        self.assertTrue(title.text_cell.scrollable)
+        self.assertTrue(title.text_cell.single_line)
 
     def test_palette_height_is_resizable_and_persistent(self):
         class UserDefaultsStore:
