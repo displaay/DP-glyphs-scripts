@@ -5,6 +5,9 @@ Test with a disposable font and scripts whose behavior is understood.
 - [ ] Glyphs 4 launches with no Script Board exception in the Macro window.
 - [ ] Script Board appears directly above Dimensions.
 - [ ] Empty state and controls fit the Palette at minimum width.
+- [ ] Dragging the lower Palette divider resizes Script Board from 72–520 pt.
+- [ ] The plus button, reload button, and script count stay pinned to the lower edge while resizing.
+- [ ] The resized height persists after reopening Glyphs.
 - [ ] Add picker searches by script, repository, and folder.
 - [ ] Multiple selected scripts are added once and Cancel changes nothing.
 - [ ] Clicking a row runs the intended script exactly once.

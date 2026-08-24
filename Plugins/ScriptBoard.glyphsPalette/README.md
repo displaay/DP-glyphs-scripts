@@ -40,7 +40,9 @@ letting Glyphs install it preserves macOS security metadata.
 5. Click a board row to run it.
 
 Drag rows to reorder them. Right-click a row to run, reveal, inspect, remove,
-or assign a shortcut. The Palette gear menu contains refresh and reset actions.
+or assign a shortcut. Drag the divider below Script Board to resize it
+vertically; Glyphs remembers the chosen height across launches. The Palette
+gear menu contains refresh and reset actions.
 
 ## Shortcuts
 

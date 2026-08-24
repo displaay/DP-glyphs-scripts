@@ -45,6 +45,7 @@ from AppKit import (
     NSView,
     NSViewHeightSizable,
     NSViewMaxXMargin,
+    NSViewMaxYMargin,
     NSViewMinXMargin,
     NSViewMinYMargin,
     NSViewWidthSizable,
@@ -74,7 +75,11 @@ DEFAULTS_KEY = "com.displaay.ScriptBoard.state"
 BOARD_CHANGED_NOTIFICATION = "com.displaay.ScriptBoard.changed"
 SCRIPT_MENU_RELOADED_NOTIFICATION = "GSReloadScriptMenu"
 ROW_PASTEBOARD_TYPE = "com.displaay.ScriptBoard.rows"
+MIN_HEIGHT = 72
 DEFAULT_HEIGHT = 164
+MAX_HEIGHT = 520
+FOOTER_BUTTON_RESIZING_MASK = NSViewMaxXMargin | NSViewMaxYMargin
+FOOTER_LABEL_RESIZING_MASK = NSViewWidthSizable | NSViewMaxYMargin
 
 
 def _alert(message, informative="", style=None):
@@ -98,13 +103,25 @@ def _system_image(symbol_name, fallback_name, description):
     return NSImage.imageNamed_(fallback_name)
 
 
+def _palette_view_class():
+    """Return Glyphs' native resizable Palette container when available."""
+
+    try:
+        return objc.lookUpClass("GSPaletteView")
+    except Exception:
+        # Keeps imports and unit tests independent from a running Glyphs app.
+        return NSView
+
+
 class ScriptBoard(PalettePlugin):
     @objc.python_method
     def settings(self):
         self.name = Glyphs.localize({"en": "Script Board"})
         self.sortId = 5  # Public GlyphsPalette sort order; Dimensions is 10.
-        self.min = 72
-        self.max = 280
+        # A differing min/max plus both currentHeight accessors enables the
+        # native Glyphs Palette resize divider.
+        self.min = MIN_HEIGHT
+        self.max = MAX_HEIGHT
         self._state = normalize_state(Glyphs.defaults[DEFAULTS_KEY])
         self._catalog = []
         self._menu_parent = None
@@ -146,7 +163,17 @@ class ScriptBoard(PalettePlugin):
         value = NSUserDefaults.standardUserDefaults().integerForKey_(
             self.name + ".ViewHeight"
         )
-        return value or DEFAULT_HEIGHT
+        value = value or DEFAULT_HEIGHT
+        return max(self.min, min(int(value), self.max))
+
+    @objc.typedSelector(b"v@:L")
+    def setCurrentHeight_(self, new_height):
+        """Persist height changes made with Glyphs' native Palette divider."""
+
+        height = max(self.min, min(int(new_height), self.max))
+        NSUserDefaults.standardUserDefaults().setInteger_forKey_(
+            height, self.name + ".ViewHeight"
+        )
 
     @objc.typedSelector(b"@@:")
     def settingsMenu(self):
@@ -155,7 +182,13 @@ class ScriptBoard(PalettePlugin):
     @objc.python_method
     def _build_view(self):
         width, height = 180, DEFAULT_HEIGHT
-        self.dialog = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, width, height))
+        self.dialog = _palette_view_class().alloc().initWithFrame_(
+            NSMakeRect(0, 0, width, height)
+        )
+        # Glyphs sizes GSPaletteView from its intrinsic height. A translated
+        # autoresizing mask would add a fixed-height constraint and prevent
+        # the native resize drag from changing the section on screen.
+        self.dialog.setTranslatesAutoresizingMaskIntoConstraints_(False)
 
         table_frame = NSMakeRect(8, 36, width - 16, height - 42)
         self.table = NSTableView.alloc().initWithFrame_(table_frame)
@@ -223,7 +256,9 @@ class ScriptBoard(PalettePlugin):
         self.count_label.setAlignment_(NSTextAlignmentLeft)
         self.count_label.setFont_(NSFont.systemFontOfSize_(10))
         self.count_label.setTextColor_(NSColor.secondaryLabelColor())
-        self.count_label.setAutoresizingMask_(NSViewWidthSizable | NSViewMinYMargin)
+        # Keep the complete footer attached to the lower edge while the
+        # script list absorbs vertical palette resizing.
+        self.count_label.setAutoresizingMask_(FOOTER_LABEL_RESIZING_MASK)
         self.dialog.addSubview_(self.count_label)
 
     @objc.python_method
@@ -238,7 +273,7 @@ class ScriptBoard(PalettePlugin):
         button.setAccessibilityLabel_(tooltip)
         button.setTarget_(self)
         button.setAction_(action)
-        button.setAutoresizingMask_(NSViewMaxXMargin | NSViewMinYMargin)
+        button.setAutoresizingMask_(FOOTER_BUTTON_RESIZING_MASK)
         return button
 
     @objc.python_method
