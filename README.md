@@ -51,7 +51,7 @@ Most files include `# MenuTitle` metadata, so they show up in the Glyphs Scripts
 
 ## Script Index
 
-**25 Python scripts** across 8 folders.
+**30 Python scripts** across 9 folders.
 
 ### Spacing
 
@@ -83,6 +83,7 @@ Most files include `# MenuTitle` metadata, so they show up in the Glyphs Scripts
 
 | File | Menu title | Description |
 |---|---|---|
+| `Layers/Master Overview.py` | Master Overview | Opens a new Edit tab with one row per selected glyph, showing that glyph's layers across all masters in font order. |
 | `Layers/Fill Up Intermediate Layers.py` | Fill Up Intermediate Layers | Generates missing intermediate/special layers for coordinate combinations and reinterpolates them. |
 | `Layers/Masters Side by Side.py` | Masters Side by Side | Opens a new Edit tab with selected glyphs arranged by master. Axes can be reordered by dragging; checked axes are used for sorting, unchecked axes are held at the selected layer's coordinate. |
 | `Layers/Copy Selected Glyphs Between Masters.py` | Copy Selected Glyphs Between Masters | Batch-copies selected glyphs from one master to another, with toggles for strokes (paths, components, hints), metrics (LSB, RSB, width, metric keys), anchors, and master-specific kerning pairs for the selected glyphs and their groups. |
