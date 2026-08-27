@@ -1,0 +1,73 @@
+DISPLAAY GLYPHSET - GLYPHS 4 INSTALLATION
+==========================================
+
+This folder contains:
+
+- DP GlyphSet FINAL.glyphs
+  A Glyphs project template containing the complete Displaay glyph set,
+  including the predefined component structures supplied by the source.
+
+- Groups-Displaay.plist
+  A custom Font View sidebar entry with Full Set, Numbers, Brackets,
+  Symbols, and Accents groups.
+
+- Icons/DisplaayTemplate.pdf
+  The sidebar icon used by Groups-Displaay.plist.
+
+
+INSTALL THE FONT VIEW SIDEBAR ENTRY
+-----------------------------------
+
+1. In Glyphs 4, choose:
+
+       Script > Open Scripts Folder
+
+   Then quit Glyphs 4 before copying the files.
+
+2. In Finder, go up one level from the Scripts folder to the Glyphs 4
+   Application Support folder.
+
+   The default location is:
+
+       ~/Library/Application Support/Glyphs 4/
+
+3. Create an Info folder there if it does not already exist.
+
+4. Copy Groups-Displaay.plist into the Info folder.
+
+5. Copy DisplaayTemplate.pdf into an Icons folder inside Info. If an
+   Icons folder already exists, merge the contents; do not replace the
+   entire existing folder.
+
+   The installed files should be:
+
+       ~/Library/Application Support/Glyphs 4/Info/Groups-Displaay.plist
+       ~/Library/Application Support/Glyphs 4/Info/Icons/DisplaayTemplate.pdf
+
+6. Reopen Glyphs 4. "Displaay Glyphset" will appear in the Font View
+   sidebar. If it does not appear, verify the paths above and restart
+   Glyphs once more.
+
+
+USE THE GLYPHSET DOCUMENT
+-------------------------
+
+Open DP GlyphSet FINAL.glyphs in Glyphs 4, then immediately choose
+File > Save As and save a project copy under a new name. Work in that
+copy so the original template remains clean.
+
+The file intentionally uses Glyphs file format version 3. Glyphs 4 reads
+and writes this format, and it remains the default format for new Glyphs
+documents. A format conversion is not required for normal use.
+
+
+UNINSTALL THE SIDEBAR ENTRY
+---------------------------
+
+Quit Glyphs, remove Groups-Displaay.plist from the Info folder, and
+remove DisplaayTemplate.pdf only if no other sidebar entry uses it. Then
+reopen Glyphs.
+
+
+Official reference:
+https://glyphsapp.com/learn/custom-sidebar-entries-in-font-view

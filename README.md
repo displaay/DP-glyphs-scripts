@@ -1,8 +1,20 @@
 # DP Glyphs Scripts
 
-A collection of utility scripts for [Glyphs](https://glyphsapp.com/) focused on spacing, kerning, component cleanup, layer utilities, export helpers, and font-production tools.
+A collection of utility scripts and Displaay glyphset assets for [Glyphs](https://glyphsapp.com/), focused on spacing, kerning, component cleanup, layer utilities, export helpers, and font-production tools.
 
-These scripts run inside Glyphs on macOS; they are not standalone command-line tools.
+The Python scripts run inside Glyphs on macOS; they are not standalone command-line tools.
+
+## Displaay Glyphset
+
+The [`Glyphset`](Glyphset/) folder contains a 579-glyph Glyphs project template and a custom Font View sidebar entry organized into Full Set, Numbers, Brackets, Symbols, and Accents groups.
+
+| File | Purpose |
+|---|---|
+| [`Glyphset/DP GlyphSet FINAL.glyphs`](Glyphset/DP%20GlyphSet%20FINAL.glyphs) | Project template containing the complete Displaay glyph set and its predefined component structures. |
+| [`Glyphset/Groups-Displaay.plist`](Glyphset/Groups-Displaay.plist) | Custom Glyphs Font View sidebar definition. |
+| [`Glyphset/Icons/DisplaayTemplate.pdf`](Glyphset/Icons/DisplaayTemplate.pdf) | Scalable 16 pt sidebar icon referenced by the plist. |
+
+See [`Glyphset/HOW TO INSTALL.txt`](Glyphset/HOW%20TO%20INSTALL.txt) for Glyphs 4 installation and usage instructions.
 
 ## Plugins
 
@@ -16,6 +28,7 @@ These scripts run inside Glyphs on macOS; they are not standalone command-line t
 - macOS
 - Glyphs 3 for the existing scripts and VF Preview
 - Glyphs 4.0.1 or later for Script Board
+- Glyphs 4 for the Displaay glyphset
 - Glyphs Python environment
 
 Some scripts use additional libraries:
@@ -27,7 +40,7 @@ Some scripts use additional libraries:
 
 Some larger UI scripts build their interface directly with AppKit/objc rather than `vanilla`, notably `Spacing/master_spacing_and_kerning.py` and `Spacing/transfer_ufo_metrics_and_kerning.py`.
 
-## Installation
+## Script Installation
 
 1. Clone or download this repository.
 2. In Glyphs, open the Scripts folder via **Script → Open Scripts Folder**.
@@ -114,9 +127,9 @@ Most files include `# MenuTitle` metadata, so they show up in the Glyphs Scripts
 
 ## Repository Notes
 
-- This repo is a script collection, not a packaged Glyphs plugin.
+- This repo contains a script collection, two Glyphs plugins, and the Displaay glyphset assets; it is not distributed as a single packaged plugin.
 - Script filenames reflect working names in Glyphs workflows and may include legacy typos for compatibility (e.g. `Horziontals calculator.py`, `Validator bypass.py`).
-- There is currently no automated test suite in this repository.
+- Script Board core tests are in `Tests/`; its plug-in smoke test requires the Glyphs macOS runtime.
 
 ## License
 
