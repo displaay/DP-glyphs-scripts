@@ -21,13 +21,14 @@ See [`Glyphset/HOW TO INSTALL.txt`](Glyphset/HOW%20TO%20INSTALL.txt) for Glyphs 
 | Plugin | Description |
 |---|---|
 | [`Plugins/ScriptBoard.glyphsPalette`](Plugins/ScriptBoard.glyphsPalette/README.md) | Glyphs 4 right-Palette launcher for favorite installed scripts, with search, ordering, persistence, and conflict-checked shortcuts. |
+| [`Plugins/GlyphNote.glyphsPalette`](Plugins/GlyphNote.glyphsPalette/README.md) | Glyphs 4 right-Palette editor for per-glyph notes, with a lock that shares one note across masters or a different note per master, plus Font View note badges. |
 | [`Plugins/VFPreview.glyphsReporter`](Plugins/VFPreview.glyphsReporter/README.md) | Live variable-font interpolation preview with axis sliders, master involvement charts, standalone window, and measurement tools. Install by copying the bundle to `~/Library/Application Support/Glyphs/Plugins/`. |
 
 ## Requirements
 
 - macOS
 - Glyphs 3 for the existing scripts and VF Preview
-- Glyphs 4.0.1 or later for Script Board
+- Glyphs 4.0.1 or later for Script Board and Glyph Note
 - Glyphs 4 for the Displaay glyphset
 - Glyphs Python environment
 
@@ -128,9 +129,9 @@ Most files include `# MenuTitle` metadata, so they show up in the Glyphs Scripts
 
 ## Repository Notes
 
-- This repo contains a script collection, two Glyphs plugins, and the Displaay glyphset assets; it is not distributed as a single packaged plugin.
+- This repo contains a script collection, Glyphs plugins, and the Displaay glyphset assets; it is not distributed as a single packaged plugin.
 - Script filenames reflect working names in Glyphs workflows and may include legacy typos for compatibility (e.g. `Horziontals calculator.py`, `Validator bypass.py`).
-- Script Board core tests are in `Tests/`; its plug-in smoke test requires the Glyphs macOS runtime.
+- Palette plug-ins include unit tests under `Tests/` for their Glyphs-independent core logic; plug-in smoke tests require the Glyphs macOS runtime.
 
 ## License
 
