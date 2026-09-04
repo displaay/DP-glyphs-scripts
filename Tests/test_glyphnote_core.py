@@ -17,6 +17,7 @@ from glyphnote.core import (  # noqa: E402
     PLACEHOLDER_EMPTY_NOTES,
     PLACEHOLDER_MULTIPLE,
     PLACEHOLDER_NO_SELECTION,
+    STYLES_KEY,
     GlyphNoteState,
     apply_lock_to_states,
     apply_note_to_states,
@@ -25,6 +26,7 @@ from glyphnote.core import (  # noqa: E402
     clear_all_notes,
     empty_state,
     get_display_note,
+    get_display_styles,
     has_any_note,
     has_visible_note,
     is_locked,
@@ -36,6 +38,7 @@ from glyphnote.core import (  # noqa: E402
     set_locked,
     write_glyph_state,
 )
+from glyphnote.markup import FLAG_BOLD, StyleRun  # noqa: E402
 
 
 LIGHT = "light"
@@ -296,6 +299,47 @@ class GlyphRoundTripTests(unittest.TestCase):
         locked = set_locked(state, True, MASTERS, LIGHT)
         write_glyph_state(glyph, locked, MASTERS)
         self.assertTrue(layer_has_note(glyph.layers[BOLD], glyph))
+
+
+class NoteStyleTests(unittest.TestCase):
+    def test_read_migrates_markdown_without_writing(self):
+        glyph = FakeGlyph(note="*hello*")
+        state = read_glyph_state(glyph, MASTERS)
+        self.assertEqual(get_display_note(state, LIGHT), "hello")
+        self.assertEqual(get_display_styles(state, LIGHT), [StyleRun(0, 5, FLAG_BOLD)])
+        self.assertEqual(glyph.note, "*hello*")
+
+    def test_write_stores_plain_text_and_style_runs(self):
+        glyph = FakeGlyph(note="*hello*")
+        state = read_glyph_state(glyph, MASTERS)
+        write_glyph_state(glyph, state, MASTERS)
+        self.assertEqual(glyph.note, "hello")
+        self.assertEqual(glyph.userData[STYLES_KEY], "0:5:1")
+        loaded = read_glyph_state(glyph, MASTERS)
+        self.assertEqual(get_display_note(loaded, LIGHT), "hello")
+        self.assertEqual(get_display_styles(loaded, LIGHT)[0].flags, FLAG_BOLD)
+
+    def test_unlocked_styles_survive_write_and_master_switch(self):
+        glyph = FakeGlyph()
+        unlocked = set_locked(empty_state(), False, MASTERS, LIGHT)
+        state = set_display_note(
+            unlocked, "hello", LIGHT, MASTERS, [StyleRun(0, 5, FLAG_BOLD)]
+        )
+        state = set_display_note(state, "other", BOLD, MASTERS, [])
+        write_glyph_state(glyph, state, MASTERS, LIGHT)
+        loaded = read_glyph_state(glyph, MASTERS)
+        self.assertEqual(get_display_note(loaded, LIGHT), "hello")
+        self.assertEqual(get_display_styles(loaded, LIGHT), [StyleRun(0, 5, FLAG_BOLD)])
+        self.assertEqual(get_display_note(loaded, BOLD), "other")
+        self.assertEqual(get_display_styles(loaded, BOLD), [])
+
+    def test_set_display_note_keeps_styles(self):
+        state = set_display_note(
+            empty_state(), "hello", LIGHT, MASTERS, [StyleRun(0, 5, FLAG_BOLD)]
+        )
+        self.assertEqual(state.note, "hello")
+        self.assertEqual(state.note_styles[0].flags, FLAG_BOLD)
+        self.assertEqual(state.master_styles[LIGHT][0].flags, FLAG_BOLD)
 
 
 if __name__ == "__main__":

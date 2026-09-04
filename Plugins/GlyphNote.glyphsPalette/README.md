@@ -39,7 +39,10 @@ to avoid two note palettes in the sidebar.
 1. Open a font and show the right Palette (**Window → Palette**).
 2. Expand **Glyph Note**.
 3. Select one or more glyphs in Font View or Edit View.
-4. Type in the note field.
+4. Type in the note field. **⌘B**, **⌘I**, and **⌘⇧X** apply bold, italic,
+   and strikethrough in the panel. Existing `*bold*`, `_italic_`, and
+   `~~strikethrough~~` notes are imported as styled text; the markers are not
+   shown and are not written back after you save.
 5. Check **Lock for all masters** to keep the same note on every master.
    Uncheck it to give the current master its own note.
 
@@ -73,10 +76,11 @@ or reselecting cells will redraw the badges.
 
 ## Storage
 
-- Native `glyph.note` for the shared / list-view note (compatible with
-  existing Note Palettes and UFO imports).
+- Native `glyph.note` for the shared / list-view note (plain text, no markup).
+- `glyph.userData["com.displaay.GlyphNote.styles"]` for bold/italic/strike runs.
 - `glyph.userData["com.displaay.GlyphNote.locked"]` for the lock flag.
 - `glyph.userData["com.displaay.GlyphNote.masterNotes"]` for per-master text.
+- `glyph.userData["com.displaay.GlyphNote.masterStyles"]` for per-master style runs.
 - `layer.userData["com.displaay.GlyphNote.note"]` as a per-layer mirror.
 
 Existing `glyph.note` values are treated as locked notes and are not discarded.
@@ -93,6 +97,7 @@ Contents/
   Resources/
     plugin.py                  Glyphs/AppKit integration and callbacks
     glyphnote/core.py          Pure lock, storage, and selection logic
+    glyphnote/markup.py        Style runs and import of *bold* / _italic_ / ~~strike~~
     glyphnote/ui.py            Native Palette checkbox, label, and editor
 ```
 
@@ -105,6 +110,9 @@ placing it after Script Board (5) and immediately before Dimensions (10).
   selected and relaunch Glyphs.
 - Empty selection shows “No glyph selected.” Differing notes on a multi-
   selection show “Multiple values.”
+- List View and Glyphs’ native note icon show the plain note text. Bold,
+  italic, and strikethrough are Glyph Note panel styles and are not drawn
+  by Glyphs’ built-in Notes column.
 - Custom Font View badges only draw in Grid View cells; the native note icon
   and List View Notes column use `glyph.note`.
 

@@ -31,6 +31,7 @@ from glyphnote.core import (
     selection_display,
     write_glyph_state,
 )
+from glyphnote.markup import MARKER_BY_KIND
 from glyphnote.ui import DEFAULT_HEIGHT, GlyphNotePaletteView
 
 
@@ -125,6 +126,7 @@ class GlyphNotePalette(PalettePlugin):
         self._updating = False
         self._palette = GlyphNotePaletteView()
         self._palette.attach_target(self)
+        self._displayed_master_id = None
         self.dialog = self._palette.dialog
         self.lock_button = self._palette.lock_button
         self.master_label = self._palette.master_label
@@ -362,10 +364,13 @@ class GlyphNotePalette(PalettePlugin):
             window = self.dialog.window()
             if window is not None:
                 editing = window.firstResponder() == self.text_view
-            if not editing:
+            master_changed = display.master_id != self._displayed_master_id
+            if (not editing) or master_changed:
                 current = self.text_view.string()
                 if current != display.text:
                     self.text_view.setString_(display.text)
+                self._palette.apply_style_runs(display.text, display.styles)
+                self._displayed_master_id = display.master_id
             show_placeholder = not bool(self.text_view.string()) and not editing
             self._palette.set_placeholder_visible(show_placeholder)
             self._palette.set_enabled(display.has_selection)
@@ -415,11 +420,20 @@ class GlyphNotePalette(PalettePlugin):
             return
         if notification.object() is not self.text_view:
             return
-        self._apply_note(self.text_view.string())
-        self._palette.set_placeholder_visible(not bool(self.text_view.string()))
+        text, styles = self._palette.read_note_contents()
+        self._apply_note(text, styles)
+        self._palette.set_placeholder_visible(not bool(text))
+
+    def toggleMarkupKind_(self, kind):
+        if self._updating:
+            return
+        kind = str(kind)
+        if kind not in MARKER_BY_KIND:
+            return
+        self._palette.toggle_style_kind(kind)
 
     @objc.python_method
-    def _apply_note(self, text):
+    def _apply_note(self, text, styles=None):
         font = self._font()
         glyphs = self._selected_glyphs(font)
         if not glyphs:
@@ -431,6 +445,7 @@ class GlyphNotePalette(PalettePlugin):
             text,
             master_id,
             master_ids,
+            styles,
         )
         self._write_states(font, glyphs, states, master_ids, master_id)
 

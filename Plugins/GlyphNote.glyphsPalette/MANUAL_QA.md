@@ -20,5 +20,8 @@ Test with a disposable multi-master font.
 - [ ] Show Badges in Font View draws a bottom-left badge on layers that have a note.
 - [ ] Clearing the active master note only clears that master when unlocked.
 - [ ] Clear All Notes in Selection removes shared and per-master notes.
+- [ ] `*bold*`, `_italic_`, and `~~strike~~` import as styled words with no visible markers.
+- [ ] ⌘B / ⌘I / ⌘⇧X toggle style on the selection; the stored `glyph.note` stays plain text.
+- [ ] After saving a styled note, List View shows the words without `*` / `_` / `~~`.
 - [ ] The interface remains legible in light, dark, and increased-contrast modes.
 - [ ] Unloading/relaunching leaves no duplicate observers or DrawFontView callbacks.
