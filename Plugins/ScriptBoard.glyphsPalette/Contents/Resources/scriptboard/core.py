@@ -7,7 +7,9 @@ import uuid
 from collections.abc import Mapping, Sequence
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+SCRIPT_COLORS = ("red", "orange", "green", "teal", "blue", "purple", "pink", "gray")
 
 # Stable NSEvent modifier values. Keeping them here lets this module run without
 # AppKit, which makes persistence and shortcut logic independently testable.
@@ -154,6 +156,7 @@ def make_board_item(
 ) -> dict[str, object]:
     """Create a serializable board item from a runtime catalog entry."""
 
+    color = _clean_text(entry.get("color")).casefold()
     return {
         "id": item_id or uuid.uuid4().hex,
         "source": _clean_text(entry.get("source")) or "Scripts",
@@ -163,6 +166,8 @@ def make_board_item(
         "title": _clean_text(entry.get("title")) or "Untitled Script",
         "folder": _clean_text(entry.get("folder")),
         "shortcut": _normalized_shortcut(shortcut),
+        "color": color if color in SCRIPT_COLORS else "",
+        "emoji": _clean_text(entry.get("emoji")),
     }
 
 
@@ -249,6 +254,8 @@ def state_for_preferences(value: object) -> dict[str, object]:
                 "absolute_path",
                 "title",
                 "folder",
+                "color",
+                "emoji",
             )
         }
         if item.get("shortcut") is not None:

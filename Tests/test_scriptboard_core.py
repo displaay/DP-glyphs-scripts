@@ -1,4 +1,5 @@
 import os
+import plistlib
 import sys
 import unittest
 
@@ -12,6 +13,7 @@ sys.path.insert(0, RESOURCES)
 from scriptboard.core import (  # noqa: E402
     MODIFIER_COMMAND,
     MODIFIER_SHIFT,
+    SCHEMA_VERSION,
     catalog_identity,
     display_shortcut,
     filter_catalog,
@@ -68,8 +70,42 @@ class ShortcutTests(unittest.TestCase):
 class PersistenceTests(unittest.TestCase):
     def test_migrates_legacy_path_list(self):
         state = normalize_state(["/Scripts/Old.py"])
-        self.assertEqual(state["schema_version"], 1)
+        self.assertEqual(state["schema_version"], SCHEMA_VERSION)
         self.assertEqual(state["items"][0]["title"], "Old")
+        self.assertEqual(state["items"][0]["color"], "")
+        self.assertEqual(state["items"][0]["emoji"], "")
+
+    def test_version_one_board_keeps_ids_order_and_shortcuts(self):
+        shortcut = {"key": "a", "modifiers": MODIFIER_COMMAND, "key_code": 0}
+        old_items = [
+            dict(entry(), id="first", shortcut=shortcut),
+            dict(entry(relative="Other.py"), id="second"),
+        ]
+        state = normalize_state({"schema_version": 1, "items": old_items})
+        self.assertEqual([item["id"] for item in state["items"]], ["first", "second"])
+        self.assertEqual(state["items"][0]["shortcut"], shortcut)
+        self.assertEqual(state["items"][0]["color"], "")
+        self.assertEqual(state["items"][0]["emoji"], "")
+
+    def test_appearance_survives_preferences_round_trip_and_reorder(self):
+        for emoji in ("🎨", "👩🏽‍💻", "🇨🇿", "❤️", "1️⃣"):
+            with self.subTest(emoji=emoji):
+                decorated = make_board_item(dict(entry(), color="purple", emoji=emoji))
+                plain = make_board_item(entry(relative="Other.py"))
+                state = {"items": move_items([decorated, plain], [0], 2)}
+                saved = plistlib.loads(plistlib.dumps(state_for_preferences(state)))
+                restored = normalize_state(saved)
+                self.assertEqual(restored["items"], [plain, decorated])
+
+    def test_invalid_appearance_falls_back_to_plain_labels(self):
+        for color, emoji in (("unknown", 123), (None, None), ({}, [])):
+            with self.subTest(color=color):
+                item = make_board_item(dict(entry(), color=color, emoji=emoji))
+                self.assertEqual(item["color"], "")
+                self.assertEqual(item["emoji"], "")
+        item = make_board_item(dict(entry(), color=" BLUE ", emoji=" 🎨 "))
+        self.assertEqual(item["color"], "blue")
+        self.assertEqual(item["emoji"], "🎨")
 
     def test_rejects_duplicates_and_duplicate_shortcuts(self):
         one = make_board_item(entry(), {"key": "a", "modifiers": MODIFIER_COMMAND})

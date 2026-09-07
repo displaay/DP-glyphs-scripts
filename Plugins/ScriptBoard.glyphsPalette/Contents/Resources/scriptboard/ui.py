@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import objc
 from AppKit import (
+    NSAlert,
+    NSAlertFirstButtonReturn,
+    NSApplication,
+    NSBezelStyleRounded,
+    NSButton,
     NSColor,
     NSFont,
     NSLineBreakByTruncatingMiddle,
@@ -19,9 +24,55 @@ from AppKit import (
     NSViewHeightSizable,
     NSViewWidthSizable,
 )
-from Foundation import NSObject
+from Foundation import NSObject, NSString
 
 from .core import filter_catalog
+
+
+def _first_composed_character(value):
+    """Keep a complete emoji, including joined symbols, flags and skin tones."""
+
+    value = value.strip()
+    if not value:
+        return ""
+    text = NSString.stringWithString_(value)
+    first_symbol = text.rangeOfComposedCharacterSequenceAtIndex_(0)
+    return str(text.substringWithRange_(first_symbol))
+
+
+def edit_script_emoji(title, current_emoji):
+    """Return an optional emoji, or Ellipsis when the editor is cancelled."""
+
+    alert = NSAlert.alloc().init()
+    alert.setMessageText_("Emoji for {}".format(title))
+    alert.setInformativeText_(
+        "Type or paste an emoji, or choose one with the emoji picker. "
+        "The first symbol will appear before the script name. Leave blank to remove it."
+    )
+    view = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, 300, 36))
+    field = NSTextField.alloc().initWithFrame_(NSMakeRect(0, 2, 90, 30))
+    field.setFont_(NSFont.systemFontOfSize_(18))
+    field.setStringValue_(current_emoji)
+    field.setPlaceholderString_("Emoji")
+    field.setAccessibilityLabel_("Script emoji")
+    view.addSubview_(field)
+
+    picker_button = NSButton.alloc().initWithFrame_(NSMakeRect(104, 2, 190, 30))
+    picker_button.setTitle_("Emoji Picker…")
+    picker_button.setBezelStyle_(NSBezelStyleRounded)
+    picker_button.setRefusesFirstResponder_(True)
+    picker_button.setTarget_(NSApplication.sharedApplication())
+    picker_button.setAction_("orderFrontCharacterPalette:")
+    view.addSubview_(picker_button)
+
+    alert.setAccessoryView_(view)
+    alert.addButtonWithTitle_("Save")
+    alert.addButtonWithTitle_("Cancel")
+    alert.window().setInitialFirstResponder_(field)
+    alert.window().makeFirstResponder_(field)
+    if alert.runModal() != NSAlertFirstButtonReturn:
+        return ...
+    return _first_composed_character(field.stringValue())
 
 
 class ScriptPickerController(NSObject):

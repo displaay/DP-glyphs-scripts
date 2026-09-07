@@ -8,6 +8,15 @@ Test with a disposable font and scripts whose behavior is understood.
 - [ ] Dragging the lower Palette divider resizes Script Board from 72–520 pt.
 - [ ] The plus button, reload button, and script count stay pinned to the lower edge while resizing.
 - [ ] Short script names use standard system-font width; only overflowing names narrow.
+- [ ] Rows have approximately half the previous vertical whitespace, with unchanged text size and no clipping.
+- [ ] Right-click → Color shows eight swatches, checks the current choice, and changes only that script’s name color.
+- [ ] Color → None restores the normal label color, including after scrolling reused rows into view.
+- [ ] Add/Edit Emoji accepts typed, pasted, and macOS-picker emoji; Cancel leaves the old emoji unchanged.
+- [ ] Joined emoji (👩🏽‍💻), flags (🇨🇿), and variation-selector emoji (❤️) render intact before the name.
+- [ ] Remove Emoji and saving an empty emoji restore the name’s full available width.
+- [ ] Color and emoji survive reordering, script refresh/path repair, and reopening Glyphs.
+- [ ] Color and emoji changes appear in other open font windows and the Script → Script Board submenu.
+- [ ] Emoji, long names, Missing labels, and shortcuts fit together at minimum Palette width.
 - [ ] Changing the Palette width recalculates script-name width, then truncates only beyond the readable limit.
 - [ ] The resized height persists after reopening Glyphs.
 - [ ] Add picker searches by script, repository, and folder.

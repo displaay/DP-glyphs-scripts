@@ -15,6 +15,7 @@ from AppKit import (
     NSApplication,
     NSBezelStyleAccessoryBarAction,
     NSBeep,
+    NSBezierPath,
     NSButton,
     NSColor,
     NSControlSizeSmall,
@@ -70,6 +71,7 @@ except ImportError:
     NSFontWidthStandard = 0.0
 
 from scriptboard.core import (
+    SCRIPT_COLORS,
     SUPPORTED_MODIFIERS,
     catalog_identity,
     display_shortcut,
@@ -82,7 +84,7 @@ from scriptboard.core import (
     state_for_preferences,
     validate_shortcut,
 )
-from scriptboard.ui import ScriptPickerController
+from scriptboard.ui import ScriptPickerController, edit_script_emoji
 
 
 DEFAULTS_KEY = "com.displaay.ScriptBoard.state"
@@ -96,6 +98,27 @@ FOOTER_BUTTON_RESIZING_MASK = NSViewMaxXMargin | NSViewMaxYMargin
 FOOTER_LABEL_RESIZING_MASK = NSViewWidthSizable | NSViewMaxYMargin
 SCRIPT_TITLE_FONT_SIZE = 11
 SCRIPT_TITLE_FIT_STEPS = 8
+SCRIPT_ROW_HEIGHT = 20
+SCRIPT_TEXT_HEIGHT = 16
+SCRIPT_TEXT_Y = (SCRIPT_ROW_HEIGHT - SCRIPT_TEXT_HEIGHT) / 2
+SCRIPT_EMOJI_WIDTH = 20
+
+
+def _script_color(name):
+    if name in SCRIPT_COLORS:
+        return getattr(NSColor, "system{}Color".format(name.title()))()
+    return NSColor.labelColor()
+
+
+def _color_swatch(name):
+    image = NSImage.alloc().initWithSize_((12, 12))
+    image.lockFocus()
+    try:
+        _script_color(name).setFill()
+        NSBezierPath.bezierPathWithOvalInRect_(NSMakeRect(1, 1, 10, 10)).fill()
+    finally:
+        image.unlockFocus()
+    return image
 
 
 def _alert(message, informative="", style=None):
@@ -189,7 +212,7 @@ def _fitted_script_title_font(
     return fitting_font
 
 
-def _script_row_layout(row_width, shortcut_text):
+def _script_row_layout(row_width, shortcut_text, emoji=""):
     """Return title and shortcut geometry for the available table-row width."""
 
     inset = 5
@@ -197,6 +220,7 @@ def _script_row_layout(row_width, shortcut_text):
     shortcut_gap = 4 if shortcut_text else 0
     title_width = max(
         0, float(row_width) - (2 * inset) - shortcut_gap - shortcut_width
+        - (SCRIPT_EMOJI_WIDTH if emoji else 0)
     )
     shortcut_x = max(inset, float(row_width) - inset - shortcut_width)
     return title_width, shortcut_x, shortcut_width
@@ -300,7 +324,8 @@ class ScriptBoard(PalettePlugin):
         table_frame = NSMakeRect(8, 36, width - 16, height - 42)
         self.table = NSTableView.alloc().initWithFrame_(table_frame)
         self.table.setHeaderView_(None)
-        self.table.setRowHeight_(25)
+        # 16 pt text + 4 pt padding + 1 pt intercell gap halves the old 10 pt gap.
+        self.table.setRowHeight_(SCRIPT_ROW_HEIGHT)
         self.table.setIntercellSpacing_((0, 1))
         self.table.setAllowsEmptySelection_(True)
         self.table.setAllowsMultipleSelection_(False)
@@ -573,9 +598,14 @@ class ScriptBoard(PalettePlugin):
             self._board_menu.addItem_(empty)
             return
         for board_item in self._state["items"]:
+            title = "{} {}".format(
+                board_item.get("emoji", ""), board_item["title"]
+            ).strip()
             item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-                board_item["title"], self.runBoardScript_, ""
+                title, self.runBoardScript_, ""
             )
+            if board_item.get("color"):
+                item.setImage_(_color_swatch(board_item["color"]))
             item.setTarget_(self)
             item.setRepresentedObject_(board_item["id"])
             shortcut = board_item.get("shortcut")
@@ -640,11 +670,10 @@ class ScriptBoard(PalettePlugin):
         if cell is None:
             row_width = table_column.width()
             cell = NSTableCellView.alloc().initWithFrame_(
-                NSMakeRect(0, 0, row_width, 25)
+                NSMakeRect(0, 0, row_width, SCRIPT_ROW_HEIGHT)
             )
             cell.setIdentifier_(identifier)
             title = NSTextField.labelWithString_("")
-            title.setFrame_(NSMakeRect(5, 5, max(0, row_width - 10), 16))
             title.setFont_(_script_title_font())
             _configure_script_title_field(title)
             title.setAutoresizingMask_(NSViewWidthSizable)
@@ -652,7 +681,6 @@ class ScriptBoard(PalettePlugin):
             cell.addSubview_(title)
 
             shortcut = NSTextField.labelWithString_("")
-            shortcut.setFrame_(NSMakeRect(116, 5, 43, 16))
             shortcut.setAlignment_(2)
             shortcut.setFont_(NSFont.monospacedSystemFontOfSize_weight_(9, 0))
             shortcut.setTextColor_(NSColor.secondaryLabelColor())
@@ -660,24 +688,42 @@ class ScriptBoard(PalettePlugin):
             shortcut.setTag_(202)
             cell.addSubview_(shortcut)
 
+            emoji = NSTextField.labelWithString_("")
+            emoji.setFont_(NSFont.systemFontOfSize_(12))
+            emoji.setTag_(203)
+            cell.addSubview_(emoji)
+
         item = self._state["items"][row]
         resolved = self._resolved_entry(item)
         title = item["title"] if resolved is not None else item["title"] + " — Missing"
         shortcut_text = display_shortcut(item.get("shortcut"))
+        emoji_text = item.get("emoji", "")
         row_width = cell.bounds().size.width
         title_width, shortcut_x, shortcut_width = _script_row_layout(
-            row_width, shortcut_text
+            row_width, shortcut_text, emoji_text
         )
 
         title_view = cell.viewWithTag_(201)
-        title_view.setFrame_(NSMakeRect(5, 5, title_width, 16))
+        title_x = 5 + (SCRIPT_EMOJI_WIDTH if emoji_text else 0)
+        title_view.setFrame_(
+            NSMakeRect(title_x, SCRIPT_TEXT_Y, title_width, SCRIPT_TEXT_HEIGHT)
+        )
         title_view.setStringValue_(title)
         title_view.setFont_(_fitted_script_title_font(title, title_width))
+        title_view.setTextColor_(_script_color(item.get("color")))
 
         shortcut_view = cell.viewWithTag_(202)
-        shortcut_view.setFrame_(NSMakeRect(shortcut_x, 5, shortcut_width, 16))
+        shortcut_view.setFrame_(
+            NSMakeRect(shortcut_x, SCRIPT_TEXT_Y, shortcut_width, SCRIPT_TEXT_HEIGHT)
+        )
         shortcut_view.setStringValue_(shortcut_text)
         shortcut_view.setHidden_(not bool(shortcut_text))
+        emoji_view = cell.viewWithTag_(203)
+        emoji_view.setFrame_(
+            NSMakeRect(5, SCRIPT_TEXT_Y, SCRIPT_EMOJI_WIDTH, SCRIPT_TEXT_HEIGHT)
+        )
+        emoji_view.setStringValue_(emoji_text)
+        emoji_view.setHidden_(not bool(emoji_text))
         cell.setToolTip_(item.get("absolute_path", ""))
         return cell
 
@@ -752,10 +798,53 @@ class ScriptBoard(PalettePlugin):
         if board_item.get("shortcut"):
             self._add_menu_item(menu, "Clear Shortcut", self.clearShortcut_, item_id)
         menu.addItem_(NSMenuItem.separatorItem())
+        color_menu = NSMenu.alloc().initWithTitle_("Color")
+        color_parent = self._add_menu_item(menu, "Color", None)
+        color_parent.setSubmenu_(color_menu)
+        for color in ("",) + SCRIPT_COLORS:
+            color_item = self._add_menu_item(
+                color_menu, color.title() if color else "None", self.setScriptColor_,
+                {"id": item_id, "color": color},
+            )
+            color_item.setState_(1 if board_item.get("color", "") == color else 0)
+            if color:
+                color_item.setImage_(_color_swatch(color))
+        self._add_menu_item(
+            menu, "Edit Emoji…" if board_item.get("emoji") else "Add Emoji…",
+            self.editScriptEmoji_, item_id,
+        )
+        if board_item.get("emoji"):
+            self._add_menu_item(menu, "Remove Emoji", self.clearScriptEmoji_, item_id)
+        menu.addItem_(NSMenuItem.separatorItem())
         self._add_menu_item(menu, "Reveal Script in Finder", self.revealScript_, item_id)
         self._add_menu_item(menu, "Show Details", self.showDetails_, item_id)
         menu.addItem_(NSMenuItem.separatorItem())
         self._add_menu_item(menu, "Remove from Board", self.removeScript_, item_id)
+
+    def setScriptColor_(self, sender):
+        choice = sender.representedObject()
+        board_item = self._board_item(choice["id"])
+        if board_item is not None:
+            board_item["color"] = choice["color"]
+            self._save_state()
+
+    def editScriptEmoji_(self, sender):
+        item_id = sender.representedObject()
+        board_item = self._board_item(item_id)
+        if board_item is None:
+            return
+        emoji = edit_script_emoji(board_item["title"], board_item.get("emoji", ""))
+        # Another palette can refresh state while the editor is open.
+        board_item = self._board_item(item_id)
+        if emoji is not ... and board_item is not None:
+            board_item["emoji"] = emoji
+            self._save_state()
+
+    def clearScriptEmoji_(self, sender):
+        board_item = self._board_item(sender.representedObject())
+        if board_item is not None:
+            board_item["emoji"] = ""
+            self._save_state()
 
     def assignShortcut_(self, sender):
         board_item = self._board_item(sender.representedObject())

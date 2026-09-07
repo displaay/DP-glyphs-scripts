@@ -40,7 +40,20 @@ letting Glyphs install it preserves macOS security metadata.
 5. Click a board row to run it.
 
 Drag rows to reorder them. Right-click a row to run, reveal, inspect, remove,
-or assign a shortcut. Drag the divider below Script Board to resize it
+assign a shortcut, or customize its appearance:
+
+- **Color** changes the script name to one of eight system colors. Choose
+  **None** to restore the default text color.
+- **Add Emoji… / Edit Emoji…** lets you type, paste, or use the macOS emoji
+  picker to place an emoji before the name. Leave the field blank or choose
+  **Remove Emoji** to clear it. Joined emoji, flags, and skin tones stay intact.
+
+Colors and emoji are optional and persist across launches. The Script Board
+submenu in Glyphs’ Script menu also shows the emoji and a color swatch.
+Compact rows keep the same text size with approximately half the previous
+vertical whitespace.
+
+Drag the divider below Script Board to resize it
 vertically; Glyphs remembers the chosen height across launches. The Palette
 gear menu contains refresh and reset actions. Script names keep the standard
 system-font width when they fit and narrow progressively only when the current
@@ -65,7 +78,9 @@ global event tap or requests Accessibility permission.
 
 Board state is stored in the namespaced Glyphs preference
 `com.displaay.ScriptBoard.state`. The schema stores a source, relative path,
-last-known absolute path, display title, order, and shortcut—never script code.
+last-known absolute path, display title, order, shortcut, color, and optional
+emoji—never script code. Existing boards migrate automatically with their
+scripts, order, and shortcuts preserved.
 
 After Glyphs reloads scripts, Script Board resolves items against the new Script
 menu. A uniquely moved script is rebound automatically. Unresolved items stay
