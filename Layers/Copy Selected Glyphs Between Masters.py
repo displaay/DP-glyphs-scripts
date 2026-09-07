@@ -3,17 +3,17 @@
 # Copyright (c) 2026 Displaay Type Foundry. All rights reserved.
 
 __doc__ = """
-Batch-copy selected glyphs from one master to another: outlines, metrics, and
-master-specific kerning pair values. Kerning group names are shared across
-masters and are not copied.
+Batch-copy selected glyphs from one master to one or more other masters:
+outlines, metrics, and master-specific kerning pair values. Kerning group names
+are shared across masters and are not copied.
 """
 
-from __future__ import annotations
-
 import traceback
+import sys
+import types
 
-from GlyphsApp import Glyphs, LTR
-from vanilla import Button, CheckBox, PopUpButton, TextBox, Window
+from GlyphsApp import GSLTR, Glyphs
+from vanilla import Button, CheckBox, FloatingWindow, List, PopUpButton, TextBox
 
 
 def safe_string(value):
@@ -66,11 +66,36 @@ def master_layer(glyph, master):
         return None
 
 
-def replace_layer_strokes(target_layer, source_layer):
-    paths = [path.copy() for path in source_layer.paths]
-    components = [component.copy() for component in source_layer.components]
-    target_layer.shapes = paths + components
-    target_layer.hints = [hint.copy() for hint in source_layer.hints]
+def target_masters(masters, source_index, selected_indices, all_others=False):
+    """Return unique target masters, always excluding the source master."""
+    if all_others:
+        indices = range(len(masters))
+    else:
+        indices = selected_indices
+
+    result = []
+    seen = set()
+    for index in indices:
+        if index == source_index or index in seen:
+            continue
+        if 0 <= index < len(masters):
+            seen.add(index)
+            result.append(masters[index])
+    return result
+
+
+def replace_layer_content(target_layer, source_layer, copy_anchors):
+    """Copy Glyphs 4 layer content while keeping hint-node links intact."""
+    preserved_anchors = None
+    if not copy_anchors:
+        preserved_anchors = [anchor.copy() for anchor in target_layer.anchors]
+
+    # In Glyphs 4 this is preferable to rebuilding paths and components: it
+    # preserves shape order/groups and reconnects copied hints to copied nodes.
+    target_layer.getCopyOfContentFromLayer_doSelection_(source_layer, False)
+
+    if preserved_anchors is not None:
+        target_layer.anchors = preserved_anchors
 
 
 def copy_layer_metrics(target_layer, source_layer):
@@ -79,16 +104,17 @@ def copy_layer_metrics(target_layer, source_layer):
     target_layer.width = source_layer.width
 
     for key_name in ("leftMetricsKey", "rightMetricsKey", "widthMetricsKey"):
-        try:
-            setattr(target_layer, key_name, getattr(source_layer, key_name))
-        except Exception:
-            pass
+        setattr(target_layer, key_name, getattr(source_layer, key_name))
 
 
 def build_glyph_id_name_map(font):
     mapping = {}
     for glyph in font.glyphs:
-        mapping[safe_string(glyph.id)] = safe_string(glyph.name)
+        glyph_id = safe_string(glyph.id)
+        glyph_name = safe_string(glyph.name)
+        if glyph_id and glyph_name:
+            mapping[glyph_id] = glyph_name
+            mapping[glyph_name] = glyph_name
     return mapping
 
 
@@ -96,7 +122,7 @@ def normalize_kerning_key(key, glyph_id_name_map):
     key_text = safe_string(key)
     if key_text.startswith("@"):
         return key_text
-    return glyph_id_name_map.get(key_text, key_text)
+    return glyph_id_name_map.get(key_text)
 
 
 def build_kerning_keys_for_glyphs(glyphs):
@@ -108,28 +134,25 @@ def build_kerning_keys_for_glyphs(glyphs):
         if not glyph_name:
             continue
 
-        left_group = safe_string(getattr(glyph, "leftKerningGroup", None))
-        right_group = safe_string(getattr(glyph, "rightKerningGroup", None))
-
         left_key = safe_string(getattr(glyph, "leftKerningKey", None) or glyph_name)
         right_key = safe_string(getattr(glyph, "rightKerningKey", None) or glyph_name)
 
+        # Glyphs names the keys for the side of the glyph, not its position in
+        # the pair: the first glyph uses rightKerningKey and the second uses
+        # leftKerningKey.
         left_keys.add(glyph_name)
+        left_keys.add(right_key)
         right_keys.add(glyph_name)
-        if left_group:
-            left_keys.add(left_group)
-            left_keys.add("@MMK_R_%s" % left_group)
-        if right_group:
-            right_keys.add(right_group)
-            right_keys.add("@MMK_L_%s" % right_group)
-        left_keys.add(left_key)
-        right_keys.add(right_key)
+        right_keys.add(left_key)
 
     return left_keys, right_keys
 
 
 def get_ltr_kerning_container(font):
-    return getattr(font, "kerningLTR", getattr(font, "kerning", {}))
+    container = getattr(font, "kerningLTR", None)
+    if container is None:
+        container = getattr(font, "kerning", {})
+    return container
 
 
 def iter_kerning_pairs_for_master(font, master_id):
@@ -181,10 +204,15 @@ def copy_kerning_pairs_for_glyphs(font, source_master_id, target_master_id, glyp
         normal_left = normalize_kerning_key(left_key, glyph_id_name_map)
         normal_right = normalize_kerning_key(right_key, glyph_id_name_map)
 
+        # Ignore orphaned kerning entries whose glyph no longer exists. Passing
+        # their IDs as glyph names to Glyphs 4 would raise and stop the batch.
+        if normal_left is None or normal_right is None:
+            continue
+
         if not pair_touches_scope(normal_left, normal_right, left_keys, right_keys):
             continue
 
-        font.setKerningForPair(target_master_id, normal_left, normal_right, int(round(value)), LTR)
+        font.setKerningForPair(target_master_id, normal_left, normal_right, value, GSLTR)
         copied += 1
 
     return copied
@@ -204,10 +232,20 @@ class CopyGlyphsBetweenMastersDialog:
 
         self.master_names = [safe_string(master.name) or safe_string(master.id) for master in self.masters]
 
-        self.w = Window((430, 228), "Copy Selected Glyphs Between Masters", minSize=(430, 228))
+        self.w = FloatingWindow((430, 314), "Copy Selected Glyphs Between Masters", minSize=(430, 314))
         self._build_ui()
         self._validate()
         self.w.open()
+        self._bring_to_front()
+
+    def _bring_to_front(self):
+        try:
+            self.w.getNSWindow().makeKeyAndOrderFront_(None)
+        except Exception:
+            try:
+                self.w.makeKey()
+            except Exception:
+                pass
 
     def _message(self, title, text):
         try:
@@ -228,12 +266,30 @@ class CopyGlyphsBetweenMastersDialog:
         y += line_height
 
         w.targetLabel = TextBox((inset, y, 90, 18), "Paste into", sizeStyle="small")
-        w.targetPopup = PopUpButton((inset + 95, y - 2, -inset, 22), self.master_names, callback=self._validate)
-        if len(self.master_names) > 1:
-            w.targetPopup.set(1)
-        y += line_height + 6
+        w.targetList = List(
+            (inset + 95, y - 2, -inset, 72),
+            self.master_names,
+            allowsMultipleSelection=True,
+            showColumnTitles=False,
+            selectionCallback=self._validate,
+        )
+        y += 76
 
-        w.strokesCheck = CheckBox((inset, y, -inset, 20), "Strokes (paths, components, hints)", value=True, sizeStyle="small")
+        w.allOtherMastersCheck = CheckBox(
+            (inset + 95, y, -inset, 20),
+            "All other masters",
+            value=False,
+            sizeStyle="small",
+            callback=self._validate,
+        )
+        y += 28
+
+        w.strokesCheck = CheckBox(
+            (inset, y, -inset, 20),
+            "Outlines (shapes, groups, and hints)",
+            value=True,
+            sizeStyle="small",
+        )
         y += 22
         w.metricsCheck = CheckBox((inset, y, -inset, 20), "Metrics (LSB, RSB, width, metric keys)", value=True, sizeStyle="small")
         y += 22
@@ -250,18 +306,40 @@ class CopyGlyphsBetweenMastersDialog:
         w.copyButton = Button((-110, -28, -inset, 24), "Copy", callback=self._copy)
         w.setDefaultButton(w.copyButton)
 
+        # Set the initial target only after every callback dependency exists.
+        if len(self.master_names) > 1:
+            w.targetList.setSelection([1])
+
     def _validate(self, sender=None):
-        same_master = self.w.sourcePopup.get() == self.w.targetPopup.get()
-        self.w.copyButton.enable(not same_master)
-        if same_master:
-            self.w.statusText.set("Choose two different masters.")
+        source_index = self.w.sourcePopup.get()
+        all_others = bool(self.w.allOtherMastersCheck.get())
+        self.w.targetList.enable(not all_others)
+        targets = target_masters(
+            self.masters,
+            source_index,
+            self.w.targetList.getSelection(),
+            all_others,
+        )
+        self.w.copyButton.enable(bool(targets))
+        if not targets:
+            self.w.statusText.set("Select at least one master other than the source.")
         else:
-            self.w.statusText.set("Select glyphs in Font View or Edit View.")
+            self.w.statusText.set("Ready to copy into %i master(s)." % len(targets))
 
     def _copy(self, sender):
-        source_master = self.masters[self.w.sourcePopup.get()]
-        target_master = self.masters[self.w.targetPopup.get()]
+        source_index = self.w.sourcePopup.get()
+        source_master = self.masters[source_index]
+        targets = target_masters(
+            self.masters,
+            source_index,
+            self.w.targetList.getSelection(),
+            bool(self.w.allOtherMastersCheck.get()),
+        )
         glyphs = get_selected_glyphs(self.font)
+
+        if not targets:
+            self.w.statusText.set("Select at least one master other than the source.")
+            return
 
         if not glyphs:
             self.w.statusText.set("No glyphs selected.")
@@ -284,53 +362,75 @@ class CopyGlyphsBetweenMastersDialog:
         Glyphs.clearLog()
         print("Copy Selected Glyphs Between Masters")
         print("Source: %s" % source_master.name)
-        print("Target: %s" % target_master.name)
+        print("Targets: %s" % ", ".join(target.name for target in targets))
         print("Glyphs: %i" % len(glyphs))
 
+        undo_manager = None
+        undo_group_open = False
         self.font.disableUpdateInterface()
         try:
-            for glyph in glyphs:
-                try:
-                    source_layer = master_layer(glyph, source_master)
-                    target_layer = master_layer(glyph, target_master)
-                    if source_layer is None or target_layer is None:
-                        skipped += 1
-                        print("  skip %s (missing layer)" % glyph.name)
-                        continue
+            if self.font.parent is not None:
+                undo_manager = self.font.parent.undoManager()
+                if undo_manager is not None:
+                    undo_manager.beginUndoGrouping()
+                    undo_group_open = True
 
-                    if copy_strokes:
-                        replace_layer_strokes(target_layer, source_layer)
+            glyph_id_name_map = build_glyph_id_name_map(self.font) if copy_kerning_pairs else None
+            for target_master in targets:
+                print("Target: %s" % target_master.name)
 
-                    if copy_metrics:
-                        copy_layer_metrics(target_layer, source_layer)
+                if any((copy_strokes, copy_metrics, copy_anchors)):
+                    for glyph in glyphs:
+                        try:
+                            source_layer = master_layer(glyph, source_master)
+                            target_layer = master_layer(glyph, target_master)
+                            if source_layer is None or target_layer is None:
+                                skipped += 1
+                                print("  skip %s (missing layer)" % glyph.name)
+                                continue
 
-                    if copy_anchors:
-                        target_layer.anchors = [anchor.copy() for anchor in source_layer.anchors]
+                            if copy_strokes:
+                                replace_layer_content(target_layer, source_layer, copy_anchors)
+                            elif copy_anchors:
+                                target_layer.anchors = [anchor.copy() for anchor in source_layer.anchors]
 
-                    glyph_count += 1
-                    print("  copied %s" % glyph.name)
-                except Exception:
-                    skipped += 1
-                    errors.append(glyph.name)
-                    print("  error in %s" % glyph.name)
-                    traceback.print_exc()
+                            if copy_metrics:
+                                copy_layer_metrics(target_layer, source_layer)
 
-            if copy_kerning_pairs:
-                glyph_id_name_map = build_glyph_id_name_map(self.font)
-                kerning_pairs_copied = copy_kerning_pairs_for_glyphs(
-                    self.font,
-                    source_master.id,
-                    target_master.id,
-                    glyphs,
-                    glyph_id_name_map,
-                )
-                print("  kerning pairs copied: %i" % kerning_pairs_copied)
+                            glyph_count += 1
+                            print("  copied %s" % glyph.name)
+                        except Exception:
+                            skipped += 1
+                            errors.append("%s (%s)" % (glyph.name, target_master.name))
+                            print("  error in %s" % glyph.name)
+                            traceback.print_exc()
+
+                if copy_kerning_pairs:
+                    try:
+                        copied = copy_kerning_pairs_for_glyphs(
+                            self.font,
+                            source_master.id,
+                            target_master.id,
+                            glyphs,
+                            glyph_id_name_map,
+                        )
+                        kerning_pairs_copied += copied
+                        print("  kerning pairs copied: %i" % copied)
+                    except Exception:
+                        errors.append("kerning (%s)" % target_master.name)
+                        print("  error while copying kerning")
+                        traceback.print_exc()
         finally:
+            if undo_group_open:
+                undo_manager.endUndoGrouping()
             self.font.enableUpdateInterface()
 
-        summary = "Copied %i glyph(s)" % glyph_count
-        if kerning_pairs_copied:
-            summary += ", %i kerning pair(s)" % kerning_pairs_copied
+        summary_parts = []
+        if any((copy_strokes, copy_metrics, copy_anchors)):
+            summary_parts.append("Copied %i glyph(s)" % glyph_count)
+        if copy_kerning_pairs:
+            summary_parts.append("%i kerning pair(s)" % kerning_pairs_copied)
+        summary = "%s into %i master(s)" % (", ".join(summary_parts), len(targets))
         if skipped:
             summary += ", skipped %i" % skipped
         if errors:
@@ -340,4 +440,13 @@ class CopyGlyphsBetweenMastersDialog:
         self.w.statusText.set(summary)
 
 
-CopyGlyphsBetweenMastersDialog()
+# Glyphs 4 disposes the script's execution namespace after the run. Keep the
+# controller in a process-wide module so its Vanilla callbacks and window stay
+# alive. Re-running the script replaces the previous controller cleanly.
+WINDOW_REGISTRY_NAME = "com.displaay.glyphs-scripts.windows"
+window_registry = sys.modules.get(WINDOW_REGISTRY_NAME)
+if window_registry is None:
+    window_registry = types.ModuleType(WINDOW_REGISTRY_NAME)
+    sys.modules[WINDOW_REGISTRY_NAME] = window_registry
+
+window_registry.copyGlyphsBetweenMasters = CopyGlyphsBetweenMastersDialog()
