@@ -29,6 +29,7 @@ See [`Glyphset/HOW TO INSTALL.txt`](Glyphset/HOW%20TO%20INSTALL.txt) for Glyphs 
 - macOS
 - Glyphs 3 for the existing scripts and VF Preview
 - Glyphs 4.0.1 or later for Script Board and Glyph Note
+- Glyphs 4 for DP Swapper
 - Glyphs 4 for the Displaay glyphset
 - Glyphs Python environment
 
@@ -108,7 +109,7 @@ Most files include `# MenuTitle` metadata, so they show up in the Glyphs Scripts
 | `Tools/Assign Private Use Unicodes.py` | Assign Private Use Unicodes | Assigns consecutive Basic Private Use Area Unicode values to selected glyphs, with overwrite warnings for existing Unicode values. |
 | `Tools/Validator bypass.py` | Decompose Corner and Cap Components | Decomposes corner/cap components and rebuilds paths for selected layers. Hold **Shift** to apply to all layers in selected glyphs. |
 | `Tools/Duplicate selected node.py` | Duplicate selected node | Duplicates the selected node and inserts the copy after it (line/curve nodes only). |
-| `Tools/DP Swapper.py` | DP Swapper | Two-way swap tool for glyph/layer data, including metrics and kerning, with UI controls and suffix-aware glyph matching. |
+| `Tools/DP Swapper.py` | DP Swapper | Glyphs 4 two-way swap between suffix sets: preserves shape groups and hint links, retargets dependent references, and swaps kerning in all directions. Metrics, anchors, and complete Unicode lists are optional. Preflights master/special-layer matches and restores affected data if a batch fails. |
 | `Tools/Horziontals calculator.py` | Calculate horizontals | UI calculator for horizontal stem targets from reference stem values (Dimensions palette) and optical reduction settings. |
 | `Tools/Weight Axis Converter.py` | Weight Axis Converter | Converts axis values between Glyphs source coordinates (internal/design) and exported variable-font coordinates (external/user), including remapped instances (e.g. 550 → 500). Reads mapping points from masters, instances, and Axis Mappings custom parameters; supports any axis. |
 | `Tools/Master Consistency Checker.py` | Master Consistency Checker | Glyphs 3 UI preflight for master-to-master inconsistencies: shape/path compatibility, components, anchors, metrics, bounds, suspicious shape-order shifts, and a visual HTML report with per-glyph master overlays, severity levels, navigation, differences, and likely fixes. |
@@ -132,6 +133,7 @@ Most files include `# MenuTitle` metadata, so they show up in the Glyphs Scripts
 - This repo contains a script collection, Glyphs plugins, and the Displaay glyphset assets; it is not distributed as a single packaged plugin.
 - Script filenames reflect working names in Glyphs workflows and may include legacy typos for compatibility (e.g. `Horziontals calculator.py`, `Validator bypass.py`).
 - Palette plug-ins include unit tests under `Tests/` for their Glyphs-independent core logic; plug-in smoke tests require the Glyphs macOS runtime.
+- DP Swapper regression tests run with `python3 -m unittest Tests.test_dp_swapper`; `Tests/test_dp_swapper_native.py` additionally tests detached font objects with the Glyphs 4 Python API and `vanilla` available.
 
 ## License
 

@@ -1,437 +1,383 @@
-# encoding: utf-8
 # MenuTitle: DP Swapper
+# encoding: utf-8
 # Copyright (c) 2026 Displaay Type Foundry. All rights reserved.
 
 __doc__ = """
-Performs a two-way swap of layers, metrics, and kerning between a source set
-and a target set (e.g. stylistic sets or masters).
+Performs a two-way swap between suffixed glyph sets in Glyphs 4, preserving
+shape groups and hints, with optional metrics, anchors, and Unicode values.
 """
 
-from __future__ import annotations
 import re
 import traceback
-from GlyphsApp import *
+
+from GlyphsApp import CAP, CORNER, GSLTR, GSRTL, GSVertical, Glyphs, Message
 from vanilla import (
     Window, List, CheckBox, Button, TextBox,
-    HorizontalLine, ProgressBar, PopUpButton
+    HorizontalLine, ProgressBar, PopUpButton,
 )
 
 METRIC_KEY_NAMES = ("leftMetricsKey", "rightMetricsKey", "widthMetricsKey")
+KERNING_GROUP_NAMES = (
+    "leftKerningGroup", "rightKerningGroup", "topKerningGroup", "bottomKerningGroup",
+)
+SPECIAL_LAYER_ATTRIBUTES = ("coordinates", "axisRules", "colorPalette", "sbixSize", "color", "svg")
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# HELPERS
-# ─────────────────────────────────────────────────────────────────────────────
 
 def get_suffix_info(font):
-    """
-    Return a list of dicts: {tag, name} for every suffix in the font.
-    """
-    suffix_set = set()
-    
-    for g in font.glyphs:
-        if '.' in g.name:
-            _, suffix = g.name.rsplit('.', 1)
-            suffix_set.add(suffix)
-
+    """Return the final suffixes in the font, with available feature labels."""
+    suffixes = {g.name.rsplit(".", 1)[1] for g in font.glyphs if "." in g.name}
     feature_map = {}
-    for f in font.features:
-        if not f.name: continue
-        label = f.name
-        code  = f.code or ""
-
-        if hasattr(f, 'notes') and f.notes:
-            label = f.notes.strip()
+    for feature in font.features:
+        if not feature.name:
+            continue
+        label = feature.name
+        if feature.notes:
+            label = feature.notes.strip()
         else:
-            m_name = re.search(r'name\s+"([^"]+)"', code)
-            m_feat = re.search(r'featureNameID\s+"([^"]+)"', code)
-            if m_name: label = m_name.group(1).strip()
-            elif m_feat: label = m_feat.group(1).strip()
-
-        feature_map[f.name] = label
+            match = re.search(r'(?:name|featureNameID)\s+"([^"]+)"', feature.code or "")
+            if match:
+                label = match.group(1).strip()
+        feature_map[feature.name] = label
 
     common_names = {
-        'zero': 'Slashed Zero', 'alt': 'Alternates', 'sc': 'Small Caps',
-        'smcp': 'Small Caps', 'swsh': 'Swashes', 'locl': 'Localized Forms',
-        'sups': 'Superscripts', 'subs': 'Subscripts', 'numr': 'Numerators',
-        'dnom': 'Denominators', 'frac': 'Fractions', 'ordn': 'Ordinals',
-        'lnum': 'Lining Figures', 'onum': 'Oldstyle Figures',
-        'pnum': 'Proportional Figures', 'tnum': 'Tabular Figures'
+        "zero": "Slashed Zero", "alt": "Alternates", "sc": "Small Caps",
+        "smcp": "Small Caps", "swsh": "Swashes", "locl": "Localized Forms",
+        "sups": "Superscripts", "subs": "Subscripts", "numr": "Numerators",
+        "dnom": "Denominators", "frac": "Fractions", "ordn": "Ordinals",
+        "lnum": "Lining Figures", "onum": "Oldstyle Figures",
+        "pnum": "Proportional Figures", "tnum": "Tabular Figures",
     }
+    return [
+        {"tag": suffix, "name": feature_map.get(suffix, common_names.get(suffix, suffix))}
+        for suffix in sorted(suffixes)
+    ]
 
-    results = []
-    for suffix in sorted(suffix_set):
-        label = suffix
-        if suffix in feature_map:
-            label = feature_map[suffix]
-        elif suffix in common_names:
-            label = common_names[suffix]
 
-        results.append({"tag": suffix, "name": label})
-
-    return results
+def glyph_named(font, name):
+    # Glyphs' glyph proxy also looks up characters and Unicode strings. A base
+    # name must resolve to that exact glyph, even if an alternate is encoded.
+    glyph = font.glyphs[name]
+    return glyph if glyph is not None and glyph.name == name else None
 
 
 def format_metric_value(value):
-    try:
-        numeric_value = float(value)
-    except Exception:
-        return str(value)
-
-    rounded_value = round(numeric_value)
-    if abs(numeric_value - rounded_value) < 0.0001:
-        return str(int(rounded_value))
-    return ("%.3f" % numeric_value).rstrip("0").rstrip(".")
+    numeric_value = float(value)
+    if numeric_value.is_integer():
+        return str(int(numeric_value))
+    return ("%.12f" % numeric_value).rstrip("0").rstrip(".")
 
 
 def text_with_swapped_names(text, name_map):
+    """Replace whole glyph references simultaneously, including hyphenated names."""
     if not text or not name_map:
         return text
-
-    result = str(text)
-    placeholders = {}
-    for index, old_name in enumerate(sorted(name_map.keys(), key=len, reverse=True)):
-        token = "__DP_SWAPPER_NAME_%d__" % index
-        pattern = r"(?<![A-Za-z0-9_.])%s(?![A-Za-z0-9_.])" % re.escape(old_name)
-        result = re.sub(pattern, token, result)
-        placeholders[token] = name_map[old_name]
-
-    for token, new_name in placeholders.items():
-        result = result.replace(token, new_name)
-
-    return result
+    names = "|".join(re.escape(name) for name in sorted(name_map, key=len, reverse=True))
+    # A minus followed by a number is a metric offset; -cy is part of a name.
+    pattern = r"(?<![A-Za-z0-9_.-])(?:%s)(?![A-Za-z0-9_.]|-[A-Za-z_])" % names
+    return re.sub(pattern, lambda match: name_map[match.group(0)], str(text))
 
 
 def updated_metric_key(metric_key, fallback_value, name_map):
-    """
-    Convert metric keys to double-equals form after a metrics swap.
-    Existing metric expressions keep their reference, but glyph names inside the
-    expression are retargeted through the current swap map.
-    """
+    """Keep metric expressions, retarget references, and use layer-local == keys."""
     if metric_key:
-        key_body = str(metric_key).lstrip("=")
-        return "==" + text_with_swapped_names(key_body, name_map)
+        return "==" + text_with_swapped_names(str(metric_key).lstrip("="), name_map)
     return "==" + format_metric_value(fallback_value)
 
 
 def capture_metric_state(layer):
-    state = {
-        "width": layer.width,
-        "LSB": layer.LSB,
-        "RSB": layer.RSB,
-    }
-    for key_name in METRIC_KEY_NAMES:
-        try:
-            key_value = getattr(layer, key_name)
-        except Exception:
-            key_value = None
-        state[key_name] = str(key_value) if key_value else None
+    state = {"width": layer.width, "LSB": layer.LSB, "RSB": layer.RSB}
+    state.update({key: getattr(layer, key) for key in METRIC_KEY_NAMES})
     return state
 
 
-def notify_layer_metrics(layer, sync=True):
-    try:
-        layer.setNeedUpdateMetrics()
-    except Exception:
-        pass
+def notify_layer_metrics(layer, sync=False):
+    layer.setNeedUpdateMetrics()
     if sync:
-        try:
-            layer.syncMetrics()
-        except Exception:
-            pass
-    try:
-        layer.updateMetrics()
-    except Exception:
-        pass
+        layer.syncMetrics()
+    layer.updateMetrics()
+
+
+def restore_metric_state(layer, state):
+    for key in METRIC_KEY_NAMES:
+        setattr(layer, key, None)
+    layer.LSB = state["LSB"]
+    layer.RSB = state["RSB"]
+    layer.width = state["width"]
+    for key in METRIC_KEY_NAMES:
+        setattr(layer, key, state[key])
+    notify_layer_metrics(layer)
 
 
 def apply_metric_state(layer, state, name_map):
-    for key_name in METRIC_KEY_NAMES:
-        try:
-            setattr(layer, key_name, None)
-        except Exception:
-            pass
-
-    layer.width = state["width"]
-    layer.LSB = state["LSB"]
-    layer.RSB = state["RSB"]
-
-    layer.leftMetricsKey = updated_metric_key(state["leftMetricsKey"], state["LSB"], name_map)
-    layer.rightMetricsKey = updated_metric_key(state["rightMetricsKey"], state["RSB"], name_map)
-    layer.widthMetricsKey = updated_metric_key(state["widthMetricsKey"], state["width"], name_map)
-    notify_layer_metrics(layer, sync=True)
+    restore_metric_state(layer, state)
+    for key, value in zip(METRIC_KEY_NAMES, (state["LSB"], state["RSB"], state["width"])):
+        setattr(layer, key, updated_metric_key(state[key], value, name_map))
+    # Sync only after the whole batch and its component references are in place.
 
 
-def component_base_name(component):
-    return getattr(component, "componentName", None) or getattr(component, "name", None)
+def replace_layer_content(target, source, copy_anchors=True):
+    """Let Glyphs copy shape groups and reconnect copied hint nodes."""
+    anchors = None if copy_anchors else [anchor.copy() for anchor in target.anchors]
+    width = target.width
+    target.getCopyOfContentFromLayer_doSelection_(source, False)
+    if anchors is not None:
+        target.anchors = anchors
+    target.width = width
 
 
-def set_component_base_name(component, new_name):
-    changed = False
-    try:
-        component.componentName = new_name
-        changed = True
-    except Exception:
-        pass
-    try:
-        component.name = new_name
-        changed = True
-    except Exception:
-        pass
-    return changed
+def frozen_attribute(value):
+    if hasattr(value, "keys"):
+        return tuple(sorted((str(key), frozen_attribute(value[key])) for key in value.keys()))
+    if not isinstance(value, str) and hasattr(value, "__iter__"):
+        return tuple(frozen_attribute(item) for item in value)
+    return value
 
 
-def retarget_components_for_swapped_glyphs(font, name_map):
-    component_count = 0
-    if not name_map:
-        return component_count
+def layer_signature(layer):
+    if layer.isMasterLayer:
+        return ("master", layer.associatedMasterId or layer.layerId)
+    if layer.isSpecialLayer:
+        attributes = layer.attributes
+        settings = tuple(
+            (key, frozen_attribute(attributes[key]))
+            for key in SPECIAL_LAYER_ATTRIBUTES if key in attributes and attributes[key] is not None
+        )
+        # Names are display labels in Glyphs 4; coordinates/rules identify layers.
+        return ("special", layer.associatedMasterId, settings or (("name", layer.name),))
+    return None
 
-    for glyph in font.glyphs:
+
+def matching_layer_pairs(font, source, target):
+    """Require complete, unambiguous master and special-layer matches."""
+    source_layers, target_layers = {}, {}
+    for glyph, indexed in ((source, source_layers), (target, target_layers)):
         for layer in glyph.layers:
-            layer_changed = False
-            for component in getattr(layer, "components", []) or []:
-                base_name = component_base_name(component)
-                if base_name in name_map and set_component_base_name(component, name_map[base_name]):
-                    component_count += 1
-                    layer_changed = True
-            if layer_changed:
-                notify_layer_metrics(layer, sync=True)
+            signature = layer_signature(layer)
+            if signature is None:
+                continue
+            if signature in indexed:
+                raise ValueError("Ambiguous layers in '%s'." % glyph.name)
+            indexed[signature] = layer
+    expected = {("master", master.id) for master in font.masters}
+    if not expected.issubset(source_layers) or not expected.issubset(target_layers):
+        raise ValueError("Missing master layer.")
+    if not source_layers or source_layers.keys() != target_layers.keys():
+        raise ValueError("Master/special layers do not match.")
+    return [(layer, target_layers[signature]) for signature, layer in source_layers.items()]
 
-    return component_count
+
+def build_swap_plan(font, pair_list):
+    name_map, plan = {}, []
+    for source, target_name in pair_list:
+        current_source = glyph_named(font, source.name)
+        target = glyph_named(font, target_name)
+        if current_source is None or current_source.id != source.id:
+            raise ValueError("Source '%s' changed; refresh the preview." % source.name)
+        if target is None:
+            raise ValueError("Target '%s' not found." % target_name)
+        if source.name == target_name:
+            raise ValueError("Source and target are the same glyph.")
+        if source.name in name_map or target_name in name_map:
+            raise ValueError("A glyph occurs in more than one swap pair.")
+        layers = matching_layer_pairs(font, source, target)
+        name_map[source.name], name_map[target_name] = target_name, source.name
+        plan.append((source, target, layers))
+    if not plan:
+        raise ValueError("No pairs to swap.")
+    return plan, name_map
 
 
-def sync_metrics_for_glyph_names(font, glyph_names):
-    for glyph_name in glyph_names:
-        glyph = font.glyphs[glyph_name]
-        if glyph is None:
+def build_kerning_plan(font, name_map):
+    """Snapshot all directions once and remap explicit exceptions as one batch."""
+    id_names = {str(glyph.id): glyph.name for glyph in font.glyphs}
+    id_names.update({glyph.name: glyph.name for glyph in font.glyphs})
+    plan = []
+    for attribute, direction in (
+        ("kerningLTR", GSLTR), ("kerningRTL", GSRTL), ("kerningVertical", GSVertical),
+    ):
+        container = getattr(font, attribute, None)
+        if container is None and direction == GSLTR:
+            container = getattr(font, "kerning", None)
+        if not container:
             continue
-        for layer in glyph.layers:
-            if layer.isMasterLayer or layer.isSpecialLayer:
-                notify_layer_metrics(layer, sync=True)
-
-
-def execute_swap(font, source_glyph, target_name, deep_swap=True, swap_unicode=False, name_map=None):
-    """
-    Perform a true two-way swap of data between source_glyph and target_name.
-    """
-    target_glyph = font.glyphs[target_name]
-    if target_glyph is None:
-        return False, f"Target '{target_name}' not found."
-
-    if name_map is None:
-        name_map = {source_glyph.name: target_glyph.name, target_glyph.name: source_glyph.name}
-
-    def replace_layer_geometry(layer, new_paths, new_components):
-        """
-        Replace outlines/components by reassigning `shapes`.
-        GSLayer path/component proxies can be read-only for delete/clear.
-        """
-        layer.shapes = [p.copy() for p in new_paths] + [c.copy() for c in new_components]
-
-    def glyph_id_name_map():
-        mapping = {}
-        for glyph in font.glyphs:
-            name = getattr(glyph, "name", None)
-            if not name:
-                continue
-            for attr_name in ("id", "glyphId"):
-                glyph_id = getattr(glyph, attr_name, None)
-                if glyph_id:
-                    mapping[str(glyph_id)] = name
-        return mapping
-
-    def normalize_kerning_key(key, id_name_map):
-        key_text = str(key)
-        if key_text.startswith("@"):
-            return key_text
-        return id_name_map.get(key_text, key_text)
-
-    def iter_master_kerning_pairs(master_id):
-        kerning_container = getattr(font, "kerningLTR", getattr(font, "kerning", {}))
-        try:
-            master_kerning = kerning_container[master_id]
-        except Exception:
-            master_kerning = None
-
-        if not master_kerning:
-            return []
-
-        id_name_map = glyph_id_name_map()
-        pairs = []
-        try:
-            left_keys = list(master_kerning.keys())
-        except Exception:
-            left_keys = list(master_kerning)
-
-        for left_key in left_keys:
-            try:
-                right_dict = master_kerning[left_key]
-            except Exception:
-                continue
-
-            try:
-                right_keys = list(right_dict.keys())
-            except Exception:
-                right_keys = list(right_dict)
-
-            for right_key in right_keys:
-                try:
-                    value = right_dict[right_key]
-                except Exception:
-                    continue
-                pairs.append((
-                    normalize_kerning_key(left_key, id_name_map),
-                    normalize_kerning_key(right_key, id_name_map),
-                    value,
-                ))
-
-        return pairs
-
-    def remove_kerning_pair(master_id, left_key, right_key):
-        try:
-            font.removeKerningForPair(master_id, left_key, right_key, LTR)
-            return
-        except (NameError, TypeError):
-            pass
-        except Exception:
-            return
-
-        try:
-            font.removeKerningForPair(master_id, left_key, right_key)
-        except Exception:
-            pass
-
-    def set_kerning_pair(master_id, left_key, right_key, value):
-        try:
-            font.setKerningForPair(master_id, left_key, right_key, value, LTR)
-            return
-        except (NameError, TypeError):
-            pass
-
-        font.setKerningForPair(master_id, left_key, right_key, value)
-
-    def swap_kerning_values():
-        source_name = source_glyph.name
-        target_name_local = target_glyph.name
-
-        def swapped_key(key):
-            if key == source_name:
-                return target_name_local
-            if key == target_name_local:
-                return source_name
-            return key
-
-        pair_count = 0
         for master in font.masters:
-            master_id = master.id
-            affected_pairs = []
-            for left_key, right_key, value in iter_master_kerning_pairs(master_id):
-                if left_key in (source_name, target_name_local) or right_key in (source_name, target_name_local):
-                    affected_pairs.append((left_key, right_key, value))
+            master_pairs = container.get(master.id, {})
+            before, after = [], []
+            for left, right_values in master_pairs.items():
+                for right, value in right_values.items():
+                    left_name = str(left) if str(left).startswith("@") else id_names.get(str(left))
+                    right_name = str(right) if str(right).startswith("@") else id_names.get(str(right))
+                    # Orphaned IDs cannot be passed to Glyphs' public pair API.
+                    if left_name is None or right_name is None:
+                        continue
+                    if left_name not in name_map and right_name not in name_map:
+                        continue
+                    before.append((left_name, right_name, value))
+                    after.append((name_map.get(left_name, left_name), name_map.get(right_name, right_name), value))
+            if before:
+                plan.append((master.id, direction, before, after))
+    return plan
 
-            if not affected_pairs:
-                continue
 
-            pairs_to_remove = set()
-            pairs_to_write = {}
-            for left_key, right_key, value in affected_pairs:
-                swapped_left = swapped_key(left_key)
-                swapped_right = swapped_key(right_key)
-                pairs_to_remove.add((left_key, right_key))
-                pairs_to_remove.add((swapped_left, swapped_right))
-                pairs_to_write[(swapped_left, swapped_right)] = value
+def write_kerning_plan(font, plan, restore=False):
+    for master_id, direction, before, after in plan:
+        # Removing the union is also needed after an interrupted write/rollback.
+        for left, right in {(left, right) for left, right, _ in before + after}:
+            font.removeKerningForPair(master_id, left, right, direction)
+        for left, right, value in (before if restore else after):
+            font.setKerningForPair(master_id, left, right, value, direction)
 
-            for left_key, right_key in pairs_to_remove:
-                remove_kerning_pair(master_id, left_key, right_key)
 
-            for (left_key, right_key), value in pairs_to_write.items():
-                set_kerning_pair(master_id, left_key, right_key, value)
-                pair_count += 1
+def layers_with_backgrounds(glyph):
+    for layer in glyph.layers:
+        yield layer
+        # Reading background unconditionally would create new background layers.
+        if layer.hasBackground():
+            yield layer.background
 
-        return pair_count
 
-    def swap_always_glyph_attributes():
-        src_left_kern = source_glyph.leftKerningGroup
-        src_right_kern = source_glyph.rightKerningGroup
-        src_production_name = getattr(source_glyph, "productionName", None)
+def component_references(layer):
+    for component in layer.components or []:
+        yield component, "componentName"
+    for hint in layer.hints:
+        if hint.type in (CORNER, CAP):
+            yield hint, "name"
 
-        source_glyph.leftKerningGroup = target_glyph.leftKerningGroup
-        source_glyph.rightKerningGroup = target_glyph.rightKerningGroup
-        if hasattr(source_glyph, "productionName") and hasattr(target_glyph, "productionName"):
-            source_glyph.productionName = getattr(target_glyph, "productionName", None)
 
-        target_glyph.leftKerningGroup = src_left_kern
-        target_glyph.rightKerningGroup = src_right_kern
-        if hasattr(source_glyph, "productionName") and hasattr(target_glyph, "productionName"):
-            target_glyph.productionName = src_production_name
+def capture_glyph_state(glyph):
+    state = {key: getattr(glyph, key) for key in KERNING_GROUP_NAMES + METRIC_KEY_NAMES}
+    state["productionName"] = glyph.productionName
+    state["storeProductionName"] = glyph.storeProductionName
+    state["unicodes"] = list(glyph.unicodes or [])
+    return state
 
-        swap_kerning_values()
 
-    def find_matching_target_layer(src_layer, used_target_layer_ids):
-        # Ignore background/temp layers that do not represent editable glyph data.
-        if not (src_layer.isMasterLayer or src_layer.isSpecialLayer):
-            return None
+def set_production_state(glyph, state):
+    # Enable storage before assigning a custom production name.
+    glyph.storeProductionName = True
+    glyph.productionName = state["productionName"]
+    glyph.storeProductionName = state["storeProductionName"]
 
-        # Master layers share IDs across glyphs.
-        if src_layer.isMasterLayer:
-            master_id = src_layer.associatedMasterId or src_layer.layerId
-            if not master_id:
-                return None
-            layer = target_glyph.layers[master_id]
-            if layer is None or layer.layerId in used_target_layer_ids:
-                return None
-            return layer
 
-        # Special layers have per-glyph IDs; match by (name, associated master).
-        for candidate in target_glyph.layers:
-            if not candidate.isSpecialLayer:
-                continue
-            if candidate.layerId in used_target_layer_ids:
-                continue
-            if candidate.associatedMasterId != src_layer.associatedMasterId:
-                continue
-            if candidate.name != src_layer.name:
-                continue
-            return candidate
+def execute_swaps(font, pair_list, deep_swap=True, swap_unicode=False, progress=None):
+    """Preflight a batch, snapshot affected data, and restore it on failure."""
+    plan, name_map = build_swap_plan(font, pair_list)
+    kerning_plan = build_kerning_plan(font, name_map)
+    swapped_layers = {id(layer) for _, _, pairs in plan for pair in pairs for layer in pair}
+    layer_states, glyph_states = [], []
+    # Include external references so their metrics and geometry can be restored.
+    for glyph in font.glyphs:
+        affected = glyph.name in name_map
+        glyph_keys_changed = deep_swap and any(
+            text_with_swapped_names(getattr(glyph, key), name_map) != getattr(glyph, key)
+            for key in METRIC_KEY_NAMES
+        )
+        for layer in layers_with_backgrounds(glyph):
+            references_changed = any(getattr(ref, attr) in name_map for ref, attr in component_references(layer))
+            keys_changed = deep_swap and any(
+                text_with_swapped_names(getattr(layer, key), name_map) != getattr(layer, key)
+                for key in METRIC_KEY_NAMES
+            )
+            if id(layer) in swapped_layers or references_changed or keys_changed or glyph_keys_changed:
+                state = capture_metric_state(layer)
+                effective = dict(state)
+                for key in METRIC_KEY_NAMES:
+                    effective[key] = state[key] or getattr(glyph, key)
+                layer_states.append((layer, layer.copy(), state, effective))
+                affected = True
+        if affected or glyph_keys_changed:
+            glyph_states.append((glyph, capture_glyph_state(glyph)))
+    by_layer = {id(layer): (backup, state, effective) for layer, backup, state, effective in layer_states}
+    by_name = {glyph.name: state for glyph, state in glyph_states}
+    undo_glyphs = []
+    component_count = 0
+    font.disableUpdateInterface()
+    try:
+        for glyph, _ in glyph_states:
+            glyph.beginUndo()
+            undo_glyphs.append(glyph)
+        for index, (source, target, pairs) in enumerate(plan):
+            for source_layer, target_layer in pairs:
+                source_backup, _, _ = by_layer[id(source_layer)]
+                target_backup, _, _ = by_layer[id(target_layer)]
+                replace_layer_content(target_layer, source_backup, copy_anchors=deep_swap)
+                replace_layer_content(source_layer, target_backup, copy_anchors=deep_swap)
+            for glyph, state in ((source, by_name[target.name]), (target, by_name[source.name])):
+                for key in KERNING_GROUP_NAMES:
+                    setattr(glyph, key, state[key])
+                set_production_state(glyph, state)
+                if deep_swap:
+                    for key in METRIC_KEY_NAMES:
+                        setattr(glyph, key, state[key])
+            if swap_unicode:
+                source.unicodes = []
+                target.unicodes = []
+                source.unicodes = by_name[target.name]["unicodes"]
+                target.unicodes = by_name[source.name]["unicodes"]
+            if progress:
+                progress(index + 1, len(plan), source.name)
 
-        return None
-
-    used_target_layer_ids = set()
-    for src_layer in source_glyph.layers:
-        target_layer = find_matching_target_layer(src_layer, used_target_layer_ids)
-        if target_layer is None:
-            continue
-        used_target_layer_ids.add(target_layer.layerId)
-
-        # 1. BACKUP Target outline/component data
-        tgt_paths_backup      = [p.copy() for p in target_layer.paths]
-        tgt_components_backup = [c.copy() for c in target_layer.components]
+        for glyph, _ in glyph_states:
+            if deep_swap:
+                for key in METRIC_KEY_NAMES:
+                    setattr(glyph, key, text_with_swapped_names(getattr(glyph, key), name_map))
+        for layer, _, _, _ in layer_states:
+            for ref, attr in component_references(layer):
+                name = getattr(ref, attr)
+                if name in name_map:
+                    setattr(ref, attr, name_map[name])
+                    component_count += 1
+            if deep_swap and id(layer) not in swapped_layers:
+                for key in METRIC_KEY_NAMES:
+                    setattr(layer, key, text_with_swapped_names(getattr(layer, key), name_map))
         if deep_swap:
-            src_metric_state   = capture_metric_state(src_layer)
-            tgt_metric_state   = capture_metric_state(target_layer)
-            tgt_anchors_backup = [a.copy() for a in target_layer.anchors]
-
-        # 2. SOURCE -> TARGET
-        replace_layer_geometry(target_layer, src_layer.paths, src_layer.components)
-        if deep_swap:
-            target_layer.anchors = [a.copy() for a in src_layer.anchors]
-            apply_metric_state(target_layer, src_metric_state, name_map)
-
-        # 3. TARGET BACKUP -> SOURCE
-        replace_layer_geometry(src_layer, tgt_paths_backup, tgt_components_backup)
-        if deep_swap:
-            src_layer.anchors = tgt_anchors_backup
-            apply_metric_state(src_layer, tgt_metric_state, name_map)
-
-    # 4. Glyph-level metadata that should follow the swapped design.
-    swap_always_glyph_attributes()
-
-    if swap_unicode:
-        src_unicode = source_glyph.unicode
-        source_glyph.unicode = target_glyph.unicode
-        target_glyph.unicode = src_unicode
-
-    return True, f"SWAPPED: {source_glyph.name} <-> {target_name}"
+            # A copied alternate can temporarily reference itself until all
+            # components are retargeted. Measure only after that graph is ready.
+            for _, _, pairs in plan:
+                for source_layer, target_layer in pairs:
+                    apply_metric_state(target_layer, by_layer[id(source_layer)][2], name_map)
+                    apply_metric_state(source_layer, by_layer[id(target_layer)][2], name_map)
+        write_kerning_plan(font, kerning_plan)
+        for layer, _, _, _ in layer_states:
+            notify_layer_metrics(layer, sync=deep_swap and (layer.isMasterLayer or layer.isSpecialLayer))
+    except Exception as error:
+        rollback_errors = []
+        # Continue restoring independent objects if one native setter fails.
+        for glyph, state in glyph_states:
+            try:
+                for key in KERNING_GROUP_NAMES + METRIC_KEY_NAMES:
+                    setattr(glyph, key, state[key])
+                set_production_state(glyph, state)
+                if swap_unicode:
+                    glyph.unicodes = []
+            except Exception as rollback_error:
+                rollback_errors.append(str(rollback_error))
+        if swap_unicode:
+            for glyph, state in glyph_states:
+                try:
+                    glyph.unicodes = state["unicodes"]
+                except Exception as rollback_error:
+                    rollback_errors.append(str(rollback_error))
+        for layer, backup, metrics, _ in layer_states:
+            try:
+                replace_layer_content(layer, backup)
+                restore_metric_state(layer, metrics)
+            except Exception as rollback_error:
+                rollback_errors.append(str(rollback_error))
+        try:
+            write_kerning_plan(font, kerning_plan, restore=True)
+        except Exception as rollback_error:
+            rollback_errors.append(str(rollback_error))
+        if rollback_errors:
+            raise RuntimeError("Swap failed; restoration incomplete: " + "; ".join(rollback_errors)) from error
+        raise RuntimeError("Swap failed; original data restored: %s" % error) from error
+    finally:
+        try:
+            for glyph in reversed(undo_glyphs):
+                glyph.endUndo()
+        finally:
+            font.enableUpdateInterface()
+    return len(plan), component_count
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -475,6 +421,7 @@ class DPSwapperDialog:
             selectionCallback=self._update_preview,
             allowsMultipleSelection=False,
             allowsEmptySelection=True,
+            allowsSorting=False,
         )
 
         # Right Panel -- Target & Preview
@@ -498,6 +445,7 @@ class DPSwapperDialog:
             ],
             allowsMultipleSelection=True,
             allowsEmptySelection=True,
+            allowsSorting=False,
         )
 
         w.rightDivider = HorizontalLine((254, -180, -12, 1))
@@ -505,14 +453,14 @@ class DPSwapperDialog:
         w.alwaysLabel = TextBox((254, -168, 140, 16), "Always swapped", sizeStyle="small")
         w.alwaysText = TextBox(
             (254, -148, -12, 32),
-            "Outlines, components, dependent component references, kerning groups,\nkerning values, and production names",
+            "Outlines, shape groups, hints, dependent references, kerning groups,\nkerning values (LTR, RTL, vertical), and custom production names",
             sizeStyle="small",
         )
 
         w.optionsLabel = TextBox((254, -112, 140, 16), "Optional", sizeStyle="small")
 
         w.deepCheck = CheckBox(
-            (254, -94, 300, 20),
+            (254, -94, 190, 20),
             "Metrics and anchors",
             value=True,
             sizeStyle="small",
@@ -544,8 +492,9 @@ class DPSwapperDialog:
 
     def _get_current_target_suffix(self):
         idx = self.w.targetPopup.get()
-        if idx == 0: return "" # Base glyph
-        return self.target_tags[idx] # Returns ".tag"
+        if idx == 0:
+            return ""
+        return self.target_tags[idx]
 
     def _update_preview(self, sender=None):
         sel = self.w.sourceList.getSelection()
@@ -564,22 +513,26 @@ class DPSwapperDialog:
             if g.name.endswith("." + source_tag):
                 base_name = g.name.rsplit("." + source_tag, 1)[0]
                 target_name = base_name + target_suffix
-                
+
                 if g.name == target_name:
                     status = "Same glyph"
                 else:
-                    target_exists = self.font.glyphs[target_name] is not None
-                    status = "Ready" if target_exists else "Missing target"
+                    target = glyph_named(self.font, target_name)
+                    status = "Missing target"
+                    if target is not None:
+                        try:
+                            matching_layer_pairs(self.font, g, target)
+                            status = "Ready"
+                        except ValueError as error:
+                            status = str(error)
 
                 rows.append({
                     "From": g.name,
                     "To": target_name,
                     "Result": status,
                     "_valid": status == "Ready",
-                    "_source": g,
-                    "_target_name": target_name
                 })
-        
+
         self.w.glyphList.set(rows)
         valid_count = sum(1 for r in rows if r["_valid"])
         skipped_count = len(rows) - valid_count
@@ -594,6 +547,9 @@ class DPSwapperDialog:
         self._trigger_swap(only_selected=False)
 
     def _trigger_swap(self, only_selected):
+        if self.font not in Glyphs.fonts:
+            self._set_status("This font was closed. Reopen DP Swapper for the font you want to edit.")
+            return
         rows = self.w.glyphList.get()
         if only_selected:
             sel_idxs = self.w.glyphList.getSelection()
@@ -603,7 +559,16 @@ class DPSwapperDialog:
             rows = [rows[i] for i in sel_idxs]
 
         # Filter out invalid rows (missing targets, or source=target)
-        valid_pairs = [(r["_source"], r["_target_name"]) for r in rows if r["_valid"]]
+        valid_pairs = []
+        for row in rows:
+            if not row["_valid"]:
+                continue
+            source = glyph_named(self.font, row["From"])
+            if source is None:
+                self._update_preview()
+                self._set_status("A source glyph changed. Review the refreshed preview.")
+                return
+            valid_pairs.append((source, row["To"]))
 
         if not valid_pairs:
             self._set_status("No valid pairs to swap. Check the Result column.")
@@ -612,54 +577,35 @@ class DPSwapperDialog:
         self._do_swap(valid_pairs, self.w.deepCheck.get(), self.w.unicodeCheck.get())
 
     def _do_swap(self, pair_list, deep, swap_unicode):
-        total  = len(pair_list)
-        errors = []
-        component_updates = 0
-        name_map = {}
-        for src_g, target_name in pair_list:
-            name_map[src_g.name] = target_name
-            name_map[target_name] = src_g.name
-
         self.w.progress.set(0)
         self.w.progressLabel.set("")
-        self.font.disableUpdateInterface()
+        self.w.swapSelBtn.enable(False)
+        self.w.swapAllBtn.enable(False)
+
+        def show_progress(done, total, source_name):
+            self.w.progress.set(int(done / total * 100))
+            self.w.progressLabel.set(f"{done} / {total}: {source_name}")
 
         try:
-            for i, (src_g, target_name) in enumerate(pair_list):
-                ok, msg = execute_swap(
-                    self.font,
-                    src_g,
-                    target_name,
-                    deep_swap=deep,
-                    swap_unicode=swap_unicode,
-                    name_map=name_map,
-                )
-                if not ok:
-                    errors.append(msg)
-                    print("DP Swapper:", msg)
-                    
-                self.w.progress.set(int((i + 1) / total * 100))
-                self.w.progressLabel.set(f"{i + 1} / {total} : {src_g.name}")
-
-            component_updates = retarget_components_for_swapped_glyphs(self.font, name_map)
-            if deep:
-                sync_metrics_for_glyph_names(self.font, name_map.keys())
-        except Exception:
-            tb = traceback.format_exc()
-            errors.append(tb)
-            print(tb)
+            count, component_updates = execute_swaps(
+                self.font, pair_list, deep_swap=deep,
+                swap_unicode=swap_unicode, progress=show_progress,
+            )
+            result = f"Swapped {count} pair(s). Updated {component_updates} component reference(s)."
+        except Exception as error:
+            print("DP Swapper:", traceback.format_exc())
+            result = f"{error} See Macro window."
+            self.w.progress.set(0)
         finally:
-            self.font.enableUpdateInterface()
-
-        self.w.progressLabel.set("")
-        self._update_preview() # Refresh statuses
-
-        if errors:
-            self._set_status(f"Done: {total - len(errors)} swapped, {len(errors)} error(s). See Macro window.")
-        else:
-            self._set_status(f"Success! Swapped {total} pair(s). Updated {component_updates} component reference(s).")
+            self.w.swapSelBtn.enable(True)
+            self.w.swapAllBtn.enable(True)
+            self.w.progressLabel.set("")
+        self._update_preview()
+        self._set_status(result)
 
     def _set_status(self, msg):
         self.w.statusText.set(msg)
 
-DPSwapperDialog()
+
+if __name__ == "__main__":
+    DPSwapperDialog()
