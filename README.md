@@ -133,6 +133,8 @@ The default **High** confidence setting applies matching component relationships
 
 Common Latin kerning-group families, including `G` sharing `O` on the left, are suggested separately at Medium confidence when contours match. The script never creates kerning pairs. Auto-aligned composite spacing and existing manual values are preserved by default. **Allow overwrite** must be chosen explicitly before an existing value can be replaced.
 
+`idotless` and `jdotless` are treated as independent bases: the script will not link their metrics back to dotted `i` or `j`, which may already be auto-aligned composites of the dotless glyphs. The same dependency check applies to other component chains, and auto-aligned glyphs are not used as metrics-key sources. Kerning groups can still inherit through safe component relationships.
+
 The included glyphset template contains empty placeholders, so its entries are skipped by default. Enable **Include empty placeholders** to preview database-derived relationships before drawing, and inspect those proposals carefully. The **Sync metrics after apply** option updates master layers; **Sync special layers too** extends that operation to special layers.
 
 For a focused in-app check, use a copy of a font containing `A`, `Aacute`, `a`, `e`, and `ae` across at least two masters: preview both an auto-aligned `Aacute` and an outlined `ae`, confirm the left/right group sources, apply checked rows, then preview again to confirm no further changes. Review the Macro Window for skipped and ambiguous glyphs.

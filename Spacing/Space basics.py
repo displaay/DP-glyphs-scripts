@@ -22,6 +22,12 @@ FIELD_SIDE = {
 }
 CONFIDENCE_ORDER = {"Low": 0, "Medium": 1, "High": 2}
 SEPARATE_SUFFIXES = {"tf", "tosf", "tnum", "lf", "osf", "pnum", "sups", "subs", "numr", "dnom"}
+# The dotted forms are commonly built from these independent base glyphs.
+# Never derive their spacing or groups backwards from the dotted composite.
+DOTLESS_BASES = {
+    "idotless": "i", "jdotless": "j", "dotlessi": "i", "dotlessj": "j",
+    "Idotless": "I", "Jdotless": "J",
+}
 # Small candidate sets, not universal type-design rules. Contours must agree.
 SIDE_FAMILIES = {
     "left": {"O": ("C", "G", "Q"), "n": ("h", "m", "u"),
@@ -117,6 +123,13 @@ def is_empty(layers):
 
 def is_auto_aligned(layers):
     for layer in layers:
+        for attribute in ("hasAlignedSideBearings", "hasAlignedWidth", "isAligned"):
+            try:
+                state = getattr(layer, attribute, None)
+                if state is not None and bool(state() if callable(state) else state):
+                    return True
+            except Exception:
+                pass
         if snapshot_items(getattr(layer, "paths", None)):
             continue
         for component in snapshot_items(getattr(layer, "components", None)):
@@ -174,6 +187,8 @@ def compatible_source(target, source, options):
 
 
 def resolve_style_source(target, source_name, glyphs, options):
+    if not source_name:
+        return None
     suffix = suffix_of(target.name)
     names = []
     if suffix and options["suffix_variants"]:
@@ -192,6 +207,43 @@ def component_name(component):
         return str(name)
     component_glyph = getattr(component, "component", None)
     return str(getattr(component_glyph, "name", "") or "")
+
+
+def component_dependencies(glyph):
+    """Include every layer: a special layer may expose a reverse dependency."""
+    names = set()
+    for layer in snapshot_items(getattr(glyph, "layers", None)):
+        for component in snapshot_items(getattr(layer, "components", None)):
+            name = component_name(component)
+            if name:
+                names.add(name)
+    return names
+
+
+def source_depends_on_target(source, target_name, glyphs):
+    pending = [source.name]
+    seen = set()
+    while pending:
+        name = pending.pop()
+        if name == target_name:
+            return True
+        if name in seen or name not in glyphs:
+            continue
+        seen.add(name)
+        pending.extend(component_dependencies(glyphs[name]))
+    return False
+
+
+def source_relationship_issue(target, source, glyphs):
+    if source is None:
+        return ""
+    target_base = target.name.split(".", 1)[0]
+    source_base = source.name.split(".", 1)[0]
+    if DOTLESS_BASES.get(target_base) == source_base:
+        return "dotless glyph must be the independent base"
+    if source_depends_on_target(source, target.name, glyphs):
+        return "source uses this glyph as a component"
+    return ""
 
 
 def component_preserves_side_shape(component):
@@ -293,6 +345,13 @@ def creates_cycle(target_name, source_name, field, glyphs, planned):
                 elif opposite and current_field == "rightMetricsKey":
                     next_field = "leftMetricsKey"
                 pending.append((ref, next_field))
+        # Auto-aligned composites inherit metrics from their base components,
+        # even when no explicit metrics key exposes that dependency.
+        if is_auto_aligned(snapshot_items(getattr(glyph, "layers", None))):
+            for component_name_value in component_dependencies(glyph):
+                component = glyphs.get(component_name_value)
+                if component is not None and category_of(component) != "Mark":
+                    pending.append((component_name_value, current_field))
     return False
 
 
@@ -415,34 +474,44 @@ def build_proposals(font, raw_options, glyph_info=None):
             components = actual_base_names(font, glyph, glyphs)
             if components:
                 candidates.append((components, "High", "matching components in every master"))
-        if not candidates and options["glyph_database"]:
+        if options["glyph_database"]:
             components = database_base_names(glyph, glyph_info)
             if components:
                 candidates.append((components, "Medium", "Glyphs glyph database recipe"))
-        if not candidates and options["suffix_variants"] and "." in name:
+        if options["suffix_variants"] and "." in name:
             base_name = name.split(".", 1)[0]
             if base_name in glyphs:
                 candidates.append(([base_name], "Low", "matching unsuffixed name"))
-        if not candidates and options["metrics_hints"]:
+        if options["metrics_hints"]:
             left_name = metric_reference(getattr(glyph, "leftMetricsKey", None), glyphs)
             right_name = metric_reference(getattr(glyph, "rightMetricsKey", None), glyphs)
-            left = resolve_style_source(glyph, left_name, glyphs, options) if left_name else None
-            right = resolve_style_source(glyph, right_name, glyphs, options) if right_name else None
-            if left or right:
-                sources[name] = (left, right, "Low", "existing metrics-key reference")
-        if candidates:
-            names, confidence, reason = candidates[0]
+            if left_name or right_name:
+                candidates.append(((left_name, right_name), "Low", "existing metrics-key reference"))
+        reported = set()
+        for names, confidence, reason in candidates:
             left = resolve_style_source(glyph, names[0], glyphs, options)
             right = resolve_style_source(glyph, names[-1], glyphs, options)
+            for side, source in (("left", left), ("right", right)):
+                issue = source_relationship_issue(glyph, source, glyphs)
+                if issue:
+                    message = "%s source %s rejected: %s" % (side, source.name, issue)
+                    if message not in reported:
+                        diagnostics.append((name, message))
+                        reported.add(message)
+                    if side == "left":
+                        left = None
+                    else:
+                        right = None
             if left or right:
                 sources[name] = (left, right, confidence, reason)
+                break
 
     # Built-in spacing examples provide base-letter metrics relationships as well
     # as composite/recipe relationships. A contour match raises confidence; a
     # disagreement stays visible but is never selected automatically.
     for name in sorted(scoped):
         glyph = glyphs.get(name)
-        if glyph is None or name in sources or excluded(glyph, options):
+        if glyph is None or excluded(glyph, options):
             continue
         layers = master_layers(font, glyph)
         if not layers or (is_empty(layers) and not options["include_empty"]):
@@ -452,8 +521,13 @@ def build_proposals(font, raw_options, glyph_info=None):
         for side in ("left", "right"):
             if not options["metric_" + side]:
                 continue
+            if name in sources and sources[name][0 if side == "left" else 1] is not None:
+                continue
             reference = metric_family_reference(glyph, side, glyphs, options)
             if reference is None or not master_layers(font, reference):
+                continue
+            if is_auto_aligned(master_layers(font, reference)):
+                diagnostics.append((name, "%s reference %s is auto-aligned" % (side, reference.name)))
                 continue
             if is_empty(master_layers(font, reference)) and not options["include_empty"]:
                 diagnostics.append((name, "%s reference %s is empty" % (side, reference.name)))
@@ -482,7 +556,7 @@ def build_proposals(font, raw_options, glyph_info=None):
     if options["seed_bases"]:
         for name in sorted(scoped):
             glyph = glyphs.get(name)
-            if glyph is None or name in sources or excluded(glyph, options):
+            if glyph is None or excluded(glyph, options):
                 continue
             layers = master_layers(font, glyph)
             eligible_category = category_of(glyph) == "Letter" or (
@@ -492,6 +566,8 @@ def build_proposals(font, raw_options, glyph_info=None):
                 continue
             for field, enabled in (("leftKerningGroup", "group_left"),
                                    ("rightKerningGroup", "group_right")):
+                if name in sources and sources[name][0 if field == "leftKerningGroup" else 1] is not None:
+                    continue
                 if options[enabled]:
                     side = "left" if field == "leftKerningGroup" else "right"
                     family = family_reference(font, glyph, side, glyphs, options)
@@ -550,6 +626,8 @@ def build_proposals(font, raw_options, glyph_info=None):
             if options["metric_" + side]:
                 if auto:
                     diagnostics.append((name, "Auto-aligned: %s metrics key skipped" % side))
+                elif is_auto_aligned(master_layers(font, source)):
+                    diagnostics.append((name, "%s metrics source %s is auto-aligned" % (side, source.name)))
                 elif creates_cycle(name, source.name, metric_field, glyphs, planned_metrics):
                     diagnostics.append((name, "%s metrics key would create a cycle" % side))
                 else:
@@ -571,6 +649,8 @@ def build_proposals(font, raw_options, glyph_info=None):
         if options["metric_width"] and left is not None and left is right:
             if auto:
                 diagnostics.append((name, "Auto-aligned: width metrics key skipped"))
+            elif is_auto_aligned(master_layers(font, left)):
+                diagnostics.append((name, "Width metrics source %s is auto-aligned" % left.name))
             elif creates_cycle(name, left.name, "widthMetricsKey", glyphs, planned_metrics):
                 diagnostics.append((name, "Width metrics key would create a cycle"))
             elif master_layers(font, left) and (options["include_empty"] or
@@ -601,6 +681,11 @@ def apply_proposals(font, proposals, options):
         if item["field"] in METRIC_FIELDS:
             if item["source"] not in glyphs:
                 raise ValueError("A metrics source was removed; refresh the preview.")
+            source = glyphs[item["source"]]
+            if source_relationship_issue(glyph, source, glyphs):
+                raise ValueError("A metrics source now depends on its target; refresh the preview.")
+            if is_auto_aligned(master_layers(font, source)):
+                raise ValueError("A metrics source is auto-aligned; refresh the preview.")
             if creates_cycle(item["glyph"], item["source"], item["field"], glyphs,
                              {(p["glyph"], p["field"]): p["after"] for p in chosen if p["field"] in METRIC_FIELDS}):
                 raise ValueError("A metrics cycle was detected; refresh the preview.")

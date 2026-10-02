@@ -153,6 +153,89 @@ class DerivativeRulesTests(unittest.TestCase):
         self.assertNotIn(("Aacute", "leftMetricsKey"), planned)
         self.assertTrue(any("Auto-aligned" in message for _, message in notes))
 
+    def test_dotless_i_and_j_remain_bases_for_dotted_auto_composites(self):
+        for base_name, dotted_name in (("idotless", "i"), ("jdotless", "j")):
+            with self.subTest(base=base_name):
+                base = Glyph(base_name)
+                dotted = Glyph(dotted_name, Layer(paths=0, components=[
+                    Component(base_name, True), Component("dotaccentcomb", True)]))
+                recipe = {base_name: Info(InfoItem(dotted_name))}
+                proposals, notes = module.build_proposals(
+                    Font(base, dotted), {"confidence": "Medium", "metric_width": True}, recipe.get)
+                planned = by_id(proposals)
+                self.assertEqual(planned[(base_name, "leftKerningGroup")]["after"], base_name)
+                self.assertEqual(planned[(dotted_name, "leftKerningGroup")]["after"], base_name)
+                self.assertNotIn((base_name, "leftMetricsKey"), planned)
+                self.assertNotIn((base_name, "rightMetricsKey"), planned)
+                self.assertNotIn((base_name, "widthMetricsKey"), planned)
+                self.assertTrue(any(name == base_name and "independent base" in note
+                                    for name, note in notes))
+
+    def test_reverse_component_dependency_is_rejected_transitively(self):
+        root = Glyph("root")
+        middle = Glyph("middle", Layer(paths=0, components=[Component("root", True)]))
+        decorated = Glyph("decorated", Layer(paths=0, components=[Component("middle", True)]))
+        recipe = {"root": Info(InfoItem("decorated"))}
+        proposals, notes = module.build_proposals(
+            Font(root, middle, decorated), {"confidence": "Medium"}, recipe.get)
+        planned = by_id(proposals)
+        self.assertNotIn(("root", "leftMetricsKey"), planned)
+        self.assertEqual(planned[("root", "leftKerningGroup")]["after"], "root")
+        self.assertEqual(planned[("decorated", "leftKerningGroup")]["after"], "root")
+        self.assertTrue(any(name == "root" and "source uses this glyph" in note
+                            for name, note in notes))
+
+    def test_auto_aligned_source_is_not_used_for_metrics_keys(self):
+        base = Glyph("roundBase")
+        source = Glyph("O", Layer(paths=0, components=[Component("roundBase", True)]))
+        target = Glyph("G")
+        composite = Glyph("C", Layer(paths=0, components=[Component("O")]))
+        proposals, notes = module.build_proposals(
+            Font(base, source, target, composite), {"metric_width": True})
+        planned = by_id(proposals)
+        self.assertNotIn(("G", "leftMetricsKey"), planned)
+        self.assertNotIn(("C", "leftMetricsKey"), planned)
+        self.assertNotIn(("C", "widthMetricsKey"), planned)
+        self.assertEqual(planned[("C", "leftKerningGroup")]["after"], "roundBase")
+        self.assertTrue(any(name == "G" and "auto-aligned" in note for name, note in notes))
+
+    def test_layer_alignment_state_also_protects_metrics_sources(self):
+        source = Glyph("O")
+        source.layers["m1"].hasAlignedSideBearings = lambda: True
+        proposals, _ = module.build_proposals(Font(source, Glyph("G")), {})
+        self.assertNotIn(("G", "leftMetricsKey"), by_id(proposals))
+
+    def test_auto_alignment_in_one_master_blocks_font_wide_metrics_link(self):
+        base, source, target = Glyph("roundBase"), Glyph("O"), Glyph("G")
+        font = Font(base, source, target)
+        font.masters.append(types.SimpleNamespace(id="m2"))
+        base.layers["m2"] = Layer()
+        source.layers["m2"] = Layer(paths=0, components=[Component("roundBase", True)])
+        target.layers["m2"] = Layer()
+        proposals, _ = module.build_proposals(font, {})
+        self.assertNotIn(("G", "leftMetricsKey"), by_id(proposals))
+
+    def test_single_side_metrics_hint_keeps_other_side_as_independent_group(self):
+        source, target = Glyph("source"), Glyph("target")
+        target.leftMetricsKey = "=source"
+        proposals, _ = module.build_proposals(
+            Font(source, target), {"metrics_hints": True, "confidence": "Low"})
+        planned = by_id(proposals)
+        self.assertEqual(planned[("target", "rightKerningGroup")]["after"], "target")
+
+    def test_apply_rejects_source_that_became_auto_aligned_after_preview(self):
+        base = Glyph("A")
+        target = Glyph("Aacute", Layer(paths=0, components=[Component("A")]))
+        underlying = Glyph("underlying")
+        font = Font(base, target, underlying)
+        proposals, _ = module.build_proposals(font, {})
+        for item in proposals:
+            item["include"] = item["id"] == ("Aacute", "leftMetricsKey")
+        base.layers["m1"] = Layer(paths=0, components=[Component("underlying", True)])
+        with self.assertRaisesRegex(ValueError, "auto-aligned"):
+            module.apply_proposals(font, proposals, module.normalized_options({}))
+        self.assertIsNone(target.leftMetricsKey)
+
     def test_asymmetric_ligature_uses_outer_sides_only(self):
         a, e = Glyph("a"), Glyph("e")
         ae = Glyph("ae", Layer(paths=0, components=[Component("a"), Component("e")]))
