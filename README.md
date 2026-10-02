@@ -31,6 +31,7 @@ See [`Glyphset/HOW TO INSTALL.txt`](Glyphset/HOW%20TO%20INSTALL.txt) for Glyphs 
 - Glyphs 4.0.1 or later for Script Board and Glyph Note
 - Glyphs 4 for DP Swapper
 - Glyphs 4 for the Displaay glyphset
+- Glyphs 4 for Space basics
 - Glyphs Python environment
 
 Some scripts use additional libraries:
@@ -53,7 +54,7 @@ Most files include `# MenuTitle` metadata, so they show up in the Glyphs Scripts
 
 ## Script Index
 
-**30 Python scripts** across 9 folders.
+**31 Python scripts** across 9 folders.
 
 ### Spacing
 
@@ -61,6 +62,7 @@ Most files include `# MenuTitle` metadata, so they show up in the Glyphs Scripts
 |---|---|---|
 | `Spacing/master_spacing_and_kerning.py` | Master Spacing and Kerning Adjuster | Batch-adjust spacing per selected masters, with optional kerning updates and unit conversions (`Percent`, `Fixed value`, `InDesign`, `Figma`, `Web`). |
 | `Spacing/transfer_ufo_metrics_and_kerning.py` | Transfer UFO Metrics and Kerning | Import spacing, kerning, and kerning groups from UFOs into a Glyphs source (master by master), with merge/overwrite options and metrics normalization tools. |
+| `Spacing/Space basics.py` | Space basics | Review and apply inferred sidebearing/width metrics keys and side-specific kerning groups; includes a full options UI, confidence levels, conflict warnings, and a checked preview. Glyphs 4 only. |
 | `Spacing/double equals before SB.py` | Set == Sidebearings with Mono Check | Converts sidebearings to locked `==` metrics keys (or normalizes existing keys), with options for glyph/master scope, optional MONO-axis filtering, and a default safeguard that skips negative sidebearings in component glyphs. |
 | `Spacing/Show Auto-Aligned == Sidebearings.py` | Remove Negative Auto-Aligned == Sidebearings | Removes negative `==` left/right sidebearing metrics keys from auto-aligned glyphs in the current master, then opens a tab with the affected glyphs. |
 | `Spacing/Out of sync Metrics.py` | Find Out-of-Sync Auto-Aligned Glyphs | Finds pure composite glyphs whose auto-aligned component metrics are out of sync in the current master and opens a tab with affected glyphs. |
@@ -122,6 +124,18 @@ Most files include `# MenuTitle` metadata, so they show up in the Glyphs Scripts
 | `Export/Selective Variable Font Export.py` | Selective Variable Font Export | Exports a variable font while dropping selected axes, keeping selected named instances, and remapping chosen instances to specific `wght` values. |
 
 ## Usage Notes
+
+### Space basics
+
+Open a font in Glyphs 4 and run **Script → Spacing → Space basics**. Choose the scope and rules, then click **Preview**. Check the proposals you want and click **Apply checked**. **Show full report** prints every proposal and skip reason in the Macro Window. Preferences are remembered between runs.
+
+The default **High** confidence setting applies matching component relationships, seeds base-letter groups, and suggests [Glyphs' documented H/O and n/o spacing links](https://glyphsapp.com/learn/spacing) when the relevant side contours match across masters. For example, the left sidebearing of `G` can link to `O` with `=O`; the right side of `G` stays independent. Links without contour evidence are **Medium** confidence, while differing contours are flagged for review. Glyphs database recipes are also **Medium** confidence, and name-only suffix matches are **Low** confidence; choose a lower threshold to include them by default, or check individual proposals after review.
+
+Common Latin kerning-group families, including `G` sharing `O` on the left, are suggested separately at Medium confidence when contours match. The script never creates kerning pairs. Auto-aligned composite spacing and existing manual values are preserved by default. **Allow overwrite** must be chosen explicitly before an existing value can be replaced.
+
+The included glyphset template contains empty placeholders, so its entries are skipped by default. Enable **Include empty placeholders** to preview database-derived relationships before drawing, and inspect those proposals carefully. The **Sync metrics after apply** option updates master layers; **Sync special layers too** extends that operation to special layers.
+
+For a focused in-app check, use a copy of a font containing `A`, `Aacute`, `a`, `e`, and `ae` across at least two masters: preview both an auto-aligned `Aacute` and an outlined `ae`, confirm the left/right group sources, apply checked rows, then preview again to confirm no further changes. Review the Macro Window for skipped and ambiguous glyphs.
 
 - Back up your `.glyphs` file before running bulk operations.
 - Open the Glyphs Macro Window to review logs and errors from scripts.
