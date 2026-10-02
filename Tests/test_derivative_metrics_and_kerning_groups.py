@@ -53,6 +53,25 @@ class Layer:
         return [start, types.SimpleNamespace(x=100), types.SimpleNamespace(x=300), end]
 
 
+class ProfileLayer(Layer):
+    def __init__(self, left, right, height=500):
+        super().__init__()
+        self.left_edge = left
+        self.right_edge = right
+        self.height = height
+
+    @property
+    def bounds(self):
+        return types.SimpleNamespace(
+            origin=types.SimpleNamespace(y=0),
+            size=types.SimpleNamespace(height=self.height),
+        )
+
+    def intersectionsBetweenPoints(self, start, end, components):
+        return [start, types.SimpleNamespace(x=self.left_edge(end.y)),
+                types.SimpleNamespace(x=self.right_edge(end.y)), end]
+
+
 class Layers(dict):
     def __iter__(self):
         return iter(self.values())
@@ -108,6 +127,181 @@ def by_id(proposals):
 
 
 class DerivativeRulesTests(unittest.TestCase):
+    def test_font_specific_checks_are_off_by_default(self):
+        self.assertFalse(module.DEFAULT_OPTIONS["font_specific_checks"])
+
+    def test_single_storey_a_uses_o_on_both_matching_sides(self):
+        round_left = lambda y: 100 + 40 * ((y - 250) / 250) ** 2
+        round_right = lambda y: 300 - 40 * ((y - 250) / 250) ** 2
+        flat_left = lambda y: 100
+        flat_right = lambda y: 300
+        font = Font(Glyph("n", ProfileLayer(flat_left, flat_right)),
+                    Glyph("o", ProfileLayer(round_left, round_right)),
+                    Glyph("a", ProfileLayer(round_left, round_right)))
+        foundation = types.SimpleNamespace(
+            NSMakePoint=lambda x, y: types.SimpleNamespace(x=x, y=y))
+        with patch.dict(sys.modules, {"Foundation": foundation}):
+            ordinary, _ = module.build_proposals(font, {})
+            smart, _ = module.build_proposals(font, {"font_specific_checks": True})
+        self.assertNotIn(("a", "leftMetricsKey"), by_id(ordinary))
+        self.assertEqual(by_id(smart)[("a", "leftMetricsKey")]["after"], "=o")
+        self.assertEqual(by_id(smart)[("a", "rightMetricsKey")]["after"], "=o")
+        self.assertTrue(by_id(smart)[("a", "rightMetricsKey")]["include"])
+
+    def test_font_specific_checks_scan_unselected_glyphs_and_new_shape_matches(self):
+        round_edge = lambda y: 100 + 40 * ((y - 250) / 250) ** 2
+        n = Glyph("n", ProfileLayer(lambda y: 100, lambda y: 300))
+        o = Glyph("o", ProfileLayer(round_edge, lambda y: 300))
+        z = Glyph("z", ProfileLayer(round_edge, lambda y: 300))
+        font = Font(n, o, z)
+        foundation = types.SimpleNamespace(
+            NSMakePoint=lambda x, y: types.SimpleNamespace(x=x, y=y))
+        with patch.dict(sys.modules, {"Foundation": foundation}):
+            proposals, _ = module.build_proposals(font, {
+                "scope": "Selected glyphs", "font_specific_checks": True})
+        self.assertEqual(by_id(proposals)[("z", "leftMetricsKey")]["after"], "=o")
+        self.assertNotIn(("z", "leftKerningGroup"), by_id(proposals))
+
+    def test_descender_or_ascender_outward_shape_blocks_false_link(self):
+        n = Glyph("n", ProfileLayer(lambda y: 100, lambda y: 300))
+        f = Glyph("f", ProfileLayer(lambda y: 50 if y > 500 else 100,
+                                    lambda y: 300, height=700))
+        foundation = types.SimpleNamespace(
+            NSMakePoint=lambda x, y: types.SimpleNamespace(x=x, y=y))
+        with patch.dict(sys.modules, {"Foundation": foundation}):
+            proposals, _ = module.build_proposals(
+                Font(n, f), {"font_specific_checks": True})
+        self.assertNotIn(("f", "leftMetricsKey"), by_id(proposals))
+
+    def test_conventional_link_changes_when_other_reference_fits(self):
+        flat = lambda y: 100
+        rounded = lambda y: 100 + 40 * ((y - 250) / 250) ** 2
+        h = Glyph("H", ProfileLayer(flat, lambda y: 300))
+        o = Glyph("O", ProfileLayer(rounded, lambda y: 300))
+        m = Glyph("M", ProfileLayer(rounded, lambda y: 300))
+        foundation = types.SimpleNamespace(
+            NSMakePoint=lambda x, y: types.SimpleNamespace(x=x, y=y))
+        with patch.dict(sys.modules, {"Foundation": foundation}):
+            proposals, _ = module.build_proposals(
+                Font(h, o, m), {"font_specific_checks": True})
+        self.assertEqual(by_id(proposals)[("M", "leftMetricsKey")]["after"], "=O")
+
+    def test_unusual_g_right_side_can_match_o(self):
+        flat = lambda y: 100
+        rounded = lambda y: 300 - 40 * ((y - 250) / 250) ** 2
+        n = Glyph("n", ProfileLayer(flat, lambda y: 300))
+        o = Glyph("o", ProfileLayer(flat, rounded))
+        g = Glyph("g", ProfileLayer(flat, rounded))
+        foundation = types.SimpleNamespace(
+            NSMakePoint=lambda x, y: types.SimpleNamespace(x=x, y=y))
+        with patch.dict(sys.modules, {"Foundation": foundation}):
+            proposals, _ = module.build_proposals(
+                Font(n, o, g), {"font_specific_checks": True})
+        self.assertEqual(by_id(proposals)[("g", "rightMetricsKey")]["after"], "=o")
+
+    def test_single_storey_alternate_can_link_to_o_instead_of_a(self):
+        flat = lambda y: 100
+        round_left = lambda y: 100 + 40 * ((y - 250) / 250) ** 2
+        round_right = lambda y: 300 - 40 * ((y - 250) / 250) ** 2
+        n = Glyph("n", ProfileLayer(flat, lambda y: 300))
+        o = Glyph("o", ProfileLayer(round_left, round_right))
+        a = Glyph("a", ProfileLayer(flat, lambda y: 300))
+        alternate = Glyph("a.ss01", ProfileLayer(round_left, round_right))
+        foundation = types.SimpleNamespace(
+            NSMakePoint=lambda x, y: types.SimpleNamespace(x=x, y=y))
+        with patch.dict(sys.modules, {"Foundation": foundation}):
+            proposals, _ = module.build_proposals(
+                Font(n, o, a, alternate), {"font_specific_checks": True,
+                                           "include_alternates": True})
+        self.assertEqual(by_id(proposals)[("a.ss01", "leftMetricsKey")]["after"], "=o")
+        self.assertEqual(by_id(proposals)[("a.ss01", "rightMetricsKey")]["after"], "=o")
+
+    def test_missing_anchor_outline_does_not_invalidate_existing_key(self):
+        h = Glyph("H", Layer(paths=0))
+        o = Glyph("O", ProfileLayer(lambda y: 100 + y * .2,
+                                     lambda y: 300 - y * .2))
+        m = Glyph("M", ProfileLayer(lambda y: 100, lambda y: 300))
+        m.leftMetricsKey = "=H"
+        foundation = types.SimpleNamespace(
+            NSMakePoint=lambda x, y: types.SimpleNamespace(x=x, y=y))
+        with patch.dict(sys.modules, {"Foundation": foundation}):
+            proposals, _ = module.build_proposals(
+                Font(h, o, m), {"font_specific_checks": True,
+                                "existing": "Allow overwrite"})
+        self.assertNotIn(("M", "leftMetricsKey"), by_id(proposals))
+
+    def test_local_metrics_exception_is_preserved(self):
+        h = Glyph("H", ProfileLayer(lambda y: 100, lambda y: 300))
+        m = Glyph("M", ProfileLayer(lambda y: 100 + y * .2,
+                                     lambda y: 300))
+        m.leftMetricsKey = "==H"
+        foundation = types.SimpleNamespace(
+            NSMakePoint=lambda x, y: types.SimpleNamespace(x=x, y=y))
+        with patch.dict(sys.modules, {"Foundation": foundation}):
+            proposals, _ = module.build_proposals(
+                Font(h, m), {"font_specific_checks": True,
+                             "existing": "Allow overwrite"})
+        self.assertNotIn(("M", "leftMetricsKey"), by_id(proposals))
+
+    def test_slanted_m_clears_wrong_h_link_for_review(self):
+        flat_left = lambda y: 100
+        flat_right = lambda y: 300
+        slant_left = lambda y: 100 + y * .25
+        slant_right = lambda y: 300 - y * .25
+        h = Glyph("H", ProfileLayer(flat_left, flat_right))
+        m = Glyph("M", ProfileLayer(slant_left, slant_right))
+        m.leftMetricsKey = "=H"
+        font = Font(h, m)
+        foundation = types.SimpleNamespace(
+            NSMakePoint=lambda x, y: types.SimpleNamespace(x=x, y=y))
+        options = {"font_specific_checks": True, "existing": "Allow overwrite"}
+        with patch.dict(sys.modules, {"Foundation": foundation}):
+            proposals, _ = module.build_proposals(font, options)
+        planned = by_id(proposals)
+        clear = planned[("M", "leftMetricsKey")]
+        self.assertIsNone(clear["after"])
+        self.assertFalse(clear["include"])
+        self.assertNotIn(("M", "rightMetricsKey"), planned)
+        for item in proposals:
+            item["include"] = item is clear
+        module.apply_proposals(font, proposals, module.normalized_options(options))
+        self.assertIsNone(m.leftMetricsKey)
+
+    def test_different_outline_derivative_loses_incorrect_source_link(self):
+        base = Glyph("A", ProfileLayer(lambda y: 100, lambda y: 300))
+        derivative = Glyph("Aacute", ProfileLayer(lambda y: 100 + y * .2,
+                                                   lambda y: 300))
+        recipe = {"Aacute": Info(InfoItem("A"), InfoItem("acutecomb", "Mark"))}
+        foundation = types.SimpleNamespace(
+            NSMakePoint=lambda x, y: types.SimpleNamespace(x=x, y=y))
+        with patch.dict(sys.modules, {"Foundation": foundation}):
+            proposals, notes = module.build_proposals(
+                Font(base, derivative), {"font_specific_checks": True,
+                                         "confidence": "Medium"}, recipe.get)
+        planned = by_id(proposals)
+        self.assertNotIn(("Aacute", "leftMetricsKey"), planned)
+        self.assertEqual(planned[("Aacute", "rightMetricsKey")]["after"], "=A")
+        self.assertTrue(any(name == "Aacute" and "differs from derivative" in note
+                            for name, note in notes))
+
+    def test_font_specific_checks_require_every_master_to_match(self):
+        round_left = lambda y: 100 + 40 * ((y - 250) / 250) ** 2
+        round_right = lambda y: 300 - 40 * ((y - 250) / 250) ** 2
+        flat_left = lambda y: 100
+        flat_right = lambda y: 300
+        n = Glyph("n", ProfileLayer(flat_left, flat_right))
+        o = Glyph("o", ProfileLayer(round_left, round_right))
+        a = Glyph("a", ProfileLayer(round_left, round_right))
+        font = Font(n, o, a)
+        font.masters.append(types.SimpleNamespace(id="m2"))
+        n.layers["m2"] = ProfileLayer(flat_left, flat_right)
+        o.layers["m2"] = ProfileLayer(round_left, round_right)
+        a.layers["m2"] = ProfileLayer(flat_left, flat_right)
+        foundation = types.SimpleNamespace(
+            NSMakePoint=lambda x, y: types.SimpleNamespace(x=x, y=y))
+        with patch.dict(sys.modules, {"Foundation": foundation}):
+            proposals, _ = module.build_proposals(font, {"font_specific_checks": True})
+        self.assertNotIn(("a", "leftMetricsKey"), by_id(proposals))
     def test_glyphs_empty_smart_values_proxy_does_not_crash_preview(self):
         class GlyphsProxy:
             def values(self):
@@ -141,6 +335,100 @@ class DerivativeRulesTests(unittest.TestCase):
             and isinstance(node.args[0], ast.Constant)
         }
         self.assertEqual(ui_keys, set(module.DEFAULT_OPTIONS))
+        self.assertEqual(set(module.OPTION_HELP), set(module.DEFAULT_OPTIONS))
+        self.assertTrue(all(module.OPTION_HELP.values()))
+
+    def test_tabbed_ui_opens_with_tooltips_on_every_option(self):
+        class Control:
+            def __init__(self, *args, **kwargs):
+                self.tooltip = None
+                self.value = kwargs.get("value")
+
+            def setToolTip(self, message):
+                self.tooltip = message
+
+            def set(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+            def enable(self, value):
+                pass
+
+            def setImage(self, **kwargs):
+                pass
+
+            def open(self):
+                pass
+
+        class Tabs(Control):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.pages = [Control() for _ in args[1]]
+
+            def __getitem__(self, index):
+                return self.pages[index]
+
+        class Image:
+            @classmethod
+            def alloc(cls):
+                return cls()
+
+            def initWithSize_(self, size):
+                return self
+
+            def lockFocus(self):
+                pass
+
+            def unlockFocus(self):
+                pass
+
+        class Path:
+            @classmethod
+            def bezierPath(cls):
+                return cls()
+
+            def moveToPoint_(self, point):
+                pass
+
+            def lineToPoint_(self, point):
+                pass
+
+            def closePath(self):
+                pass
+
+            def fill(self):
+                pass
+
+        class Color:
+            @classmethod
+            def colorWithCalibratedHue_saturation_brightness_alpha_(cls, *args):
+                return cls()
+
+            def set(self):
+                pass
+
+        vanilla = types.SimpleNamespace(**{name: Control for name in (
+            "Window", "TextBox", "PopUpButton", "CheckBox", "ImageView", "Button",
+            "HorizontalLine", "List", "CheckBoxListCell")})
+        vanilla.Tabs = Tabs
+        appkit = types.SimpleNamespace(NSBezierPath=Path, NSColor=Color, NSImage=Image)
+        foundation = types.SimpleNamespace(NSMakePoint=lambda x, y: (x, y),
+                                           NSMakeSize=lambda w, h: (w, h))
+        glyphs = types.SimpleNamespace(font=Font(Glyph("n")), defaults={})
+        glyphs_app = types.SimpleNamespace(Glyphs=glyphs, Message=lambda *args, **kwargs: None)
+        with patch.dict(sys.modules, {"vanilla": vanilla, "AppKit": appkit,
+                                      "Foundation": foundation, "GlyphsApp": glyphs_app}):
+            module.launch()
+        manager = module.DERIVATIVE_MANAGER_WINDOW
+        self.assertEqual(len(manager.w.settingsTabs.pages), 3)
+        self.assertEqual(set(manager.controls), set(module.DEFAULT_OPTIONS))
+        for key, entry in manager.controls.items():
+            control = entry[0] if isinstance(entry, tuple) else entry
+            self.assertEqual(control.tooltip, module.OPTION_HELP[key])
+        self.assertEqual(manager.w.settingsTabs[0].smartIcon.tooltip,
+                         module.OPTION_HELP["font_specific_checks"])
 
     def test_auto_aligned_accent_gets_groups_but_no_metrics_keys(self):
         base = Glyph("A")

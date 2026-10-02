@@ -54,13 +54,42 @@ DEFAULT_OPTIONS = {
     "metric_left": True, "metric_right": True, "metric_width": False,
     "group_left": True, "group_right": True,
     "actual_components": True, "glyph_database": True, "suffix_variants": True,
-    "metrics_hints": False, "reference_metrics": True,
+    "metrics_hints": False, "reference_metrics": True, "font_specific_checks": False,
     "seed_bases": True, "contour_check": True,
     "shape_families": True,
     "cross_script": False, "include_figures": False, "include_marks": False,
     "include_empty": False, "include_nonexporting": False,
     "include_alternates": False, "auto_groups": True,
     "sync_metrics": False, "sync_special_layers": False,
+}
+OPTION_HELP = {
+    "scope": "Choose all glyphs or only the selected glyphs. With Font specific checks on, eligible metrics are scanned across the whole font.",
+    "existing": "Fill empty only keeps existing keys and groups. Allow overwrite lets checked preview rows replace them.",
+    "confidence": "Minimum confidence for rows checked automatically. Every proposal remains visible for review.",
+    "contour_tolerance": "Maximum side-outline difference allowed for a shape match, measured as a percentage of the em.",
+    "metric_left": "Suggest left sidebearing metrics keys for eligible glyphs.",
+    "metric_right": "Suggest right sidebearing metrics keys for eligible glyphs.",
+    "metric_width": "Suggest width metrics keys when the same safe source supplies both sides.",
+    "group_left": "Suggest left kerning groups; this does not create kerning pairs.",
+    "group_right": "Suggest right kerning groups; this does not create kerning pairs.",
+    "actual_components": "Find derivative sources from matching components in every master.",
+    "glyph_database": "Use Glyphs' glyph database recipes as possible derivative sources.",
+    "suffix_variants": "Look for matching suffixed sources and, when appropriate, an unsuffixed base.",
+    "metrics_hints": "Consider existing metrics-key references as low-confidence source hints.",
+    "reference_metrics": "Suggest the usual H/O and n/o sidebearing links where their sides fit.",
+    "font_specific_checks": "Audit eligible Latin letter outlines in every master; add better links or flag mismatched keys for review.",
+    "seed_bases": "Give independent base letters their own left and right kerning groups.",
+    "contour_check": "Compare side outlines across masters before sharing spacing or kerning-group references.",
+    "shape_families": "Suggest shared Latin kerning groups for matching sides, such as G with O on the left.",
+    "cross_script": "Allow derivative sources in another script when their construction is otherwise compatible.",
+    "include_figures": "Include figures and figure-style suffixes in ordinary proposals.",
+    "include_marks": "Include mark glyphs in ordinary proposals.",
+    "include_empty": "Include empty placeholders, whose shape cannot yet be checked.",
+    "include_nonexporting": "Include glyphs marked as non-exporting.",
+    "include_alternates": "Include suffixed alternates such as a.ss01 in proposals and font-specific checks.",
+    "auto_groups": "Allow auto-aligned composites to inherit safe kerning groups.",
+    "sync_metrics": "Update the affected master-layer sidebearings and widths after applying keys.",
+    "sync_special_layers": "Also update special layers when Sync master-layer metrics is enabled.",
 }
 
 
@@ -400,6 +429,80 @@ def contour_tolerance(options):
             "Loose (3% em)": 0.03}[options["contour_tolerance"]]
 
 
+def side_contour_distance(font, target, source, side):
+    """Max normalized outer-edge difference in em; None means no reliable evidence."""
+    try:
+        from Foundation import NSMakePoint
+    except ImportError:
+        return None
+    target_layers = master_layers(font, target)
+    source_layers = master_layers(font, source)
+    if not target_layers or len(target_layers) != len(source_layers):
+        return None
+    upm = float(getattr(font, "upm", 1000) or 1000)
+    distances = []
+    for target_layer, source_layer in zip(target_layers, source_layers):
+        if (not snapshot_items(getattr(target_layer, "paths", None)) or
+                not snapshot_items(getattr(source_layer, "paths", None))):
+            return None
+        try:
+            a_bounds, b_bounds = target_layer.bounds, source_layer.bounds
+            low = max(a_bounds.origin.y, b_bounds.origin.y)
+            high = min(a_bounds.origin.y + a_bounds.size.height,
+                       b_bounds.origin.y + b_bounds.size.height)
+            if high - low < upm * 0.1:
+                return None
+            profiles = []
+            def outer_at(layer, y):
+                points = snapshot_items(layer.intersectionsBetweenPoints(
+                    NSMakePoint(-10000, y), NSMakePoint(10000, y), True))
+                ink = [point.x for point in points[1:-1]] if len(points) > 2 else []
+                return ((min(ink) if side == "left" else max(ink)) if ink else None)
+
+            for layer in (target_layer, source_layer):
+                profiles.append([outer_at(layer, low + (high - low) * fraction)
+                                 for fraction in (0.08, 0.15, 0.22, 0.29, 0.36, 0.43,
+                                                  0.50, 0.57, 0.64, 0.71, 0.78,
+                                                  0.85, 0.92)])
+            pairs = [(a, b) for a, b in zip(*profiles) if a is not None and b is not None]
+            if len(pairs) < 9:
+                return None
+            a_edge = min(a for a, _ in pairs) if side == "left" else max(a for a, _ in pairs)
+            b_edge = min(b for _, b in pairs) if side == "left" else max(b for _, b in pairs)
+            difference = max(abs((a - a_edge) - (b - b_edge)) for a, b in pairs)
+            # An ascender, descender, or terminal can reach outward beyond the
+            # shared height. Inward extensions do not affect this side's edge.
+            for layer, bounds, edge in ((target_layer, a_bounds, a_edge),
+                                        (source_layer, b_bounds, b_edge)):
+                bottom = bounds.origin.y
+                top = bottom + bounds.size.height
+                for start, end in ((bottom, low), (high, top)):
+                    if end - start < upm * 0.02:
+                        continue
+                    for fraction in (0.1, 0.3, 0.5, 0.7, 0.9):
+                        outer = outer_at(layer, start + (end - start) * fraction)
+                        if outer is not None:
+                            difference = max(difference, max(0, edge - outer)
+                                             if side == "left" else max(0, outer - edge))
+            distances.append(difference / upm)
+        except Exception:
+            return None
+    return max(distances) if distances else None
+
+
+def conventional_metric_source(name, side):
+    for anchor, members in SIDE_METRIC_FAMILIES[side].items():
+        if name in members:
+            return anchor
+    return None
+
+
+def smart_anchor_names(name, side):
+    anchors = ("H", "O") if name[:1].isupper() else ("n", "o")
+    # These are the spacing references, never targets of this optional pass.
+    return [] if name in anchors else list(anchors)
+
+
 def family_reference(font, glyph, side, glyphs, options):
     if not options["shape_families"] or not options["contour_check"]:
         return None
@@ -446,10 +549,156 @@ def make_proposal(glyph, field, value, source, confidence, reason, options, warn
     }
 
 
+def simple_metric_reference(key, names):
+    value = str(key or "")
+    if value.startswith("=="):
+        return None  # A local key is an intentional master-specific exception.
+    if value.startswith("="):
+        value = value[1:]
+    return value if value in names else None
+
+
+def apply_font_specific_checks(font, glyphs, sources, proposals, diagnostics, options):
+    """Revise metrics suggestions using side outlines from every master."""
+    if not options["font_specific_checks"]:
+        return proposals
+    by_id = {item["id"]: item for item in proposals}
+    tolerance = contour_tolerance(options)
+    processed = set()
+
+    def proposed_metric_keys():
+        return {(item["glyph"], item["field"]): item["after"]
+                for item in by_id.values() if item["include"] and
+                item["field"] in METRIC_FIELDS and item["after"] is not None}
+
+    for name in sorted(glyphs):
+        glyph = glyphs[name]
+        if (excluded(glyph, options) or category_of(glyph) != "Letter" or
+                script_of(glyph) not in ("", "latin")):
+            continue
+        layers = master_layers(font, glyph)
+        if not layers or is_empty(layers) or is_auto_aligned(layers):
+            continue
+        for side in ("left", "right"):
+            if not options["metric_" + side]:
+                continue
+            anchors = smart_anchor_names(name, side)
+            if not anchors:
+                continue
+            field = side + "MetricsKey"
+            item_id = (name, field)
+            raw_key = getattr(glyph, field, None)
+            current = simple_metric_reference(raw_key, glyphs)
+            old_proposal = by_id.get(item_id)
+            if raw_key and current is None:
+                by_id.pop(item_id, None)
+                processed.add(item_id)
+                diagnostics.append((name, "%s custom or local metrics key needs manual review" % side))
+                continue
+            derivative_source = (sources[name][0 if side == "left" else 1]
+                                 if name in sources else None)
+            if derivative_source is not None:
+                source_distance = side_contour_distance(font, glyph, derivative_source, side)
+                if source_distance is None or source_distance <= tolerance:
+                    continue
+            distances = {}
+            for anchor in anchors:
+                source = glyphs.get(anchor)
+                if (source is None or not compatible_source(glyph, source, options) or
+                        not master_layers(font, source) or
+                        is_auto_aligned(master_layers(font, source)) or
+                        source_relationship_issue(glyph, source, glyphs)):
+                    continue
+                distance = side_contour_distance(font, glyph, source, side)
+                if distance is not None:
+                    distances[anchor] = distance
+            if not distances:
+                continue  # No outline evidence: keep the ordinary preview.
+            processed.add(item_id)
+            normal = conventional_metric_source(name.split(".", 1)[0], side)
+            if ((normal is not None and normal in glyphs and normal not in distances) or
+                    (current in anchors and current not in distances)):
+                continue  # A missing outline is not evidence against an existing link.
+            fitting = [(distance, anchor) for anchor, distance in distances.items()
+                       if distance <= tolerance]
+            fitting.sort()
+            best = fitting[0][1] if fitting else None
+            if normal in distances and distances[normal] <= tolerance:
+                # Keep the conventional link unless another contour is clearly closer.
+                if best is None or distances[normal] <= distances[best] + tolerance * 0.25:
+                    best = normal
+            if best is None:
+                if old_proposal and (old_proposal["source"] in anchors or
+                                     old_proposal["source"] == getattr(derivative_source, "name", None)):
+                    by_id.pop(item_id)
+                if (current in anchors or
+                        (derivative_source is not None and current == derivative_source.name)):
+                    proposal = make_proposal(
+                        glyph, field, None, None, "High",
+                        "Font specific checks: side differs from spacing references",
+                        options, "review and space this side independently")
+                    if proposal:
+                        by_id[item_id] = proposal
+                if normal in distances or current in anchors:
+                    diagnostics.append((name, "%s side differs from available H/O/n/o references" % side))
+                continue
+            if current == best:
+                by_id.pop(item_id, None)
+                continue
+            if old_proposal and (old_proposal["source"] in anchors or
+                                 old_proposal["source"] == getattr(derivative_source, "name", None)):
+                by_id.pop(item_id)
+            if creates_cycle(name, best, field, glyphs, proposed_metric_keys()):
+                diagnostics.append((name, "%s smart link to %s would create a cycle" % (side, best)))
+                continue
+            confidence = "High" if distances[best] <= tolerance * 0.5 else "Medium"
+            proposal = make_proposal(
+                glyph, field, "=" + best, best, confidence,
+                "Font specific checks: matching %s contour in every master" % best,
+                options)
+            if proposal:
+                by_id[item_id] = proposal
+                if best != normal:
+                    diagnostics.append((name, "%s side matches %s better than %s" %
+                                        (side, best, normal or "the usual references")))
+
+    # A derivative with altered outlines may no longer share its construction
+    # source's side shape. Only examine sides with actual path evidence.
+    for name, source_data in sources.items():
+        glyph = glyphs[name]
+        if excluded(glyph, options):
+            continue
+        for index, side in enumerate(("left", "right")):
+            if not options["metric_" + side]:
+                continue
+            field = side + "MetricsKey"
+            item_id = (name, field)
+            if item_id in processed:
+                continue
+            source = source_data[index]
+            if source is None:
+                continue
+            distance = side_contour_distance(font, glyph, source, side)
+            if distance is None or distance <= tolerance:
+                continue
+            by_id.pop(item_id, None)
+            diagnostics.append((name, "%s side differs from derivative source %s" %
+                                (side, source.name)))
+            if simple_metric_reference(getattr(glyph, field, None), glyphs) == source.name:
+                proposal = make_proposal(
+                    glyph, field, None, None, "High",
+                    "Font specific checks: side differs from derivative source",
+                    options, "review and space this side independently")
+                if proposal:
+                    by_id[item_id] = proposal
+    return list(by_id.values())
+
+
 def build_proposals(font, raw_options, glyph_info=None):
     options = normalized_options(raw_options)
     glyphs = exact_glyph_map(font)
-    scoped = selected_names(font) if options["scope"] == "Selected glyphs" else set(glyphs)
+    selected = selected_names(font) if options["scope"] == "Selected glyphs" else None
+    scoped = set(glyphs) if options["font_specific_checks"] or selected is None else selected
     proposals = []
     diagnostics = []
     planned_metrics = {}
@@ -554,7 +803,7 @@ def build_proposals(font, raw_options, glyph_info=None):
     # A new font needs named base groups before derivatives can inherit them.
     base_groups = {}
     if options["seed_bases"]:
-        for name in sorted(scoped):
+        for name in sorted(selected if selected is not None else scoped):
             glyph = glyphs.get(name)
             if glyph is None or excluded(glyph, options):
                 continue
@@ -637,7 +886,9 @@ def build_proposals(font, raw_options, glyph_info=None):
                         proposals.append(proposal)
                         if proposal["include"]:
                             planned_metrics[(name, metric_field)] = proposal["after"]
-            if options["group_" + side] and (not auto or options["auto_groups"]):
+            if (options["group_" + side] and
+                    (selected is None or name in selected) and
+                    (not auto or options["auto_groups"])):
                 value = inherited_group(source, group_field)
                 if value:
                     proposal = make_proposal(glyph, group_field, value, source.name,
@@ -661,6 +912,12 @@ def build_proposals(font, raw_options, glyph_info=None):
                     proposals.append(proposal)
                     if proposal["include"]:
                         planned_metrics[(name, "widthMetricsKey")] = proposal["after"]
+    proposals = apply_font_specific_checks(font, glyphs, sources, proposals, diagnostics, options)
+    if options["font_specific_checks"] and selected is not None:
+        # The smart metrics audit is font-wide; ordinary group/width work still
+        # obeys the user's selection in the Scope menu.
+        proposals = [item for item in proposals if item["glyph"] in selected or
+                     item["field"] in ("leftMetricsKey", "rightMetricsKey")]
     return proposals, diagnostics
 
 
@@ -679,6 +936,10 @@ def apply_proposals(font, proposals, options):
         if options["existing"] == "Fill empty only" and item["before"] is not None:
             raise ValueError("An existing value is selected. Choose Allow overwrite and preview again.")
         if item["field"] in METRIC_FIELDS:
+            if item["after"] is None:
+                if not options["font_specific_checks"]:
+                    raise ValueError("A metrics-key removal requires Font specific checks.")
+                continue
             if item["source"] not in glyphs:
                 raise ValueError("A metrics source was removed; refresh the preview.")
             source = glyphs[item["source"]]
@@ -731,13 +992,36 @@ def apply_proposals(font, proposals, options):
 
 
 def launch():
+    import math
     import vanilla
+    from AppKit import NSBezierPath, NSColor, NSImage
+    from Foundation import NSMakePoint, NSMakeSize
     from GlyphsApp import Glyphs, Message
 
     font = Glyphs.font
     if font is None:
         Message("No Font", "Open a Glyphs font first.", OKButton="OK")
         return
+
+    def rainbow_sparkle():
+        icon = NSImage.alloc().initWithSize_(NSMakeSize(18, 18))
+        icon.lockFocus()
+        try:
+            for index in range(8):
+                angle = math.pi * index / 4.0
+                path = NSBezierPath.bezierPath()
+                path.moveToPoint_(NSMakePoint(9, 9))
+                path.lineToPoint_(NSMakePoint(9 + 8 * math.cos(angle),
+                                             9 + 8 * math.sin(angle)))
+                path.lineToPoint_(NSMakePoint(9 + 3 * math.cos(angle + math.pi / 8),
+                                             9 + 3 * math.sin(angle + math.pi / 8)))
+                path.closePath()
+                NSColor.colorWithCalibratedHue_saturation_brightness_alpha_(
+                    index / 8.0, 0.78, 0.95, 1.0).set()
+                path.fill()
+        finally:
+            icon.unlockFocus()
+        return icon
 
     class DerivativeManager:
         def __init__(self, active_font):
@@ -750,89 +1034,131 @@ def launch():
             except Exception:
                 saved = {}
             options = normalized_options(saved)
-            self.w = vanilla.Window((1180, 790), "Space basics",
-                                    minSize=(1000, 690))
+            self.w = vanilla.Window((980, 540), "Space basics",
+                                    minSize=(940, 500))
             self.controls = {}
 
             def popup(key, x, y, width, label, items):
-                self.w.__setattr__(key + "Label", vanilla.TextBox((x, y, width, 18), label, sizeStyle="small"))
+                label_control = vanilla.TextBox((x, y, width, 18), label, sizeStyle="small")
+                label_control.setToolTip(OPTION_HELP[key])
+                self.w.__setattr__(key + "Label", label_control)
                 control = vanilla.PopUpButton((x, y + 18, width, 22), items,
                                                callback=self.option_changed, sizeStyle="small")
                 control.set(items.index(options[key]))
+                control.setToolTip(OPTION_HELP[key])
                 self.w.__setattr__(key + "Control", control)
                 self.controls[key] = (control, items)
 
-            def check(key, x, y, width, label):
+            def check(key, x, y, width, label, parent=None):
+                parent = self.w if parent is None else parent
                 control = vanilla.CheckBox((x, y, width, 20), label,
                                            value=options[key], callback=self.option_changed,
                                            sizeStyle="small")
-                self.w.__setattr__(key + "Control", control)
+                control.setToolTip(OPTION_HELP[key])
+                parent.__setattr__(key + "Control", control)
                 self.controls[key] = control
 
-            popup("scope", 16, 12, 220, "Scope", ["All glyphs", "Selected glyphs"])
-            popup("existing", 252, 12, 220, "Existing assignments", ["Fill empty only", "Allow overwrite"])
-            popup("confidence", 488, 12, 180, "Apply threshold", ["High", "Medium", "Low"])
-            popup("contour_tolerance", 684, 12, 210, "Contour match", [
+            popup("scope", 16, 10, 210, "Scope", ["All glyphs", "Selected glyphs"])
+            popup("existing", 244, 10, 210, "Existing assignments", ["Fill empty only", "Allow overwrite"])
+            popup("confidence", 472, 10, 185, "Apply threshold", ["High", "Medium", "Low"])
+            popup("contour_tolerance", 675, 10, 235, "Contour match", [
                 "Strict (1% em)", "Normal (2% em)", "Loose (3% em)"])
-            self.w.hint = vanilla.TextBox((910, 19, -16, 36),
-                "Lower-confidence and conflicting proposals remain visible.", sizeStyle="small")
 
-            self.w.metricsTitle = vanilla.TextBox((16, 65, 250, 18), "Derivative metrics keys", sizeStyle="small")
-            check("metric_left", 16, 86, 100, "Left")
-            check("metric_right", 118, 86, 100, "Right")
-            check("metric_width", 220, 86, 100, "Width")
-            check("actual_components", 16, 112, 280, "Use matching components in all masters")
-            check("glyph_database", 16, 138, 280, "Use Glyphs glyph database recipes")
-            check("suffix_variants", 16, 164, 280, "Look for matching suffixed sources")
-            check("metrics_hints", 16, 190, 280, "Consider existing metrics-key hints")
-            check("reference_metrics", 16, 216, 300, "Suggest H/O and n/o spacing links")
+            self.w.settingsTabs = vanilla.Tabs(
+                (16, 61, -16, 146), ["Spacing", "Kerning groups", "Eligibility & update"],
+                sizeStyle="small")
+            spacing = self.w.settingsTabs[0]
+            kerning = self.w.settingsTabs[1]
+            eligibility = self.w.settingsTabs[2]
 
-            self.w.groupTitle = vanilla.TextBox((330, 65, 280, 18), "Kerning group assignments", sizeStyle="small")
-            check("group_left", 330, 86, 100, "Left")
-            check("group_right", 432, 86, 100, "Right")
-            check("seed_bases", 330, 112, 300, "Seed base letters with own group")
-            check("contour_check", 330, 138, 300, "Check side contours across masters")
-            check("shape_families", 330, 164, 300, "Suggest shared Latin side groups")
-            check("cross_script", 330, 190, 150, "Cross-script")
-            check("auto_groups", 490, 190, 170, "Auto-aligned groups")
+            spacing.metricTitle = vanilla.TextBox((16, 4, 360, 18),
+                                                  "Metric keys", sizeStyle="small")
+            check("metric_left", 16, 25, 84, "Left", spacing)
+            check("metric_right", 104, 25, 84, "Right", spacing)
+            check("metric_width", 192, 25, 90, "Width", spacing)
+            check("reference_metrics", 16, 51, 390,
+                  "Suggest H/O and n/o spacing links", spacing)
+            check("font_specific_checks", 16, 78, 410,
+                  "Font specific checks", spacing)
+            spacing.smartIcon = vanilla.ImageView((180, 78, 18, 18), scale="none")
+            spacing.smartIcon.setImage(imageObject=rainbow_sparkle())
+            spacing.smartIcon.setToolTip(OPTION_HELP["font_specific_checks"])
 
-            self.w.scopeTitle = vanilla.TextBox((660, 65, 270, 18), "Eligibility and updating", sizeStyle="small")
-            check("include_figures", 660, 86, 220, "Include figures")
-            check("include_marks", 890, 86, 220, "Include marks")
-            check("include_empty", 660, 112, 220, "Include empty placeholders")
-            check("include_nonexporting", 890, 112, 250, "Include non-exporting glyphs")
-            check("include_alternates", 660, 138, 450, "Include suffix variants and alternates")
-            check("sync_metrics", 660, 164, 220, "Sync metrics after apply")
-            check("sync_special_layers", 890, 164, 250, "Sync special layers too")
-            self.w.autoNote = vanilla.TextBox((660, 190, 490, 30),
-                "Auto-aligned metrics and existing kerning pairs are preserved.", sizeStyle="small")
+            spacing.sourceTitle = vanilla.TextBox((454, 4, 400, 18),
+                                                  "Derivative sources", sizeStyle="small")
+            check("actual_components", 454, 25, 410,
+                  "Matching components in every master", spacing)
+            check("glyph_database", 454, 49, 410,
+                  "Glyphs database recipes", spacing)
+            check("suffix_variants", 454, 73, 410,
+                  "Matching suffixed sources", spacing)
+            check("metrics_hints", 454, 97, 410,
+                  "Existing metrics-key hints", spacing)
 
-            self.w.rule = vanilla.HorizontalLine((16, 252, -16, 1))
-            self.w.previewButton = vanilla.Button((16, 264, 140, 26), "Preview", callback=self.preview)
-            self.w.selectButton = vanilla.Button((166, 264, 150, 26), "Select eligible", callback=self.select_eligible)
-            self.w.clearButton = vanilla.Button((326, 264, 140, 26), "Clear selection", callback=self.clear_selection)
-            self.w.applyButton = vanilla.Button((-170, 264, 154, 26), "Apply checked", callback=self.apply)
+            kerning.groupTitle = vanilla.TextBox((16, 4, 360, 18),
+                                                  "Kerning groups", sizeStyle="small")
+            check("group_left", 16, 25, 84, "Left", kerning)
+            check("group_right", 104, 25, 84, "Right", kerning)
+            check("seed_bases", 16, 51, 410,
+                  "Seed base letters with own group", kerning)
+            check("shape_families", 16, 75, 410,
+                  "Suggest shared Latin side groups", kerning)
+            check("contour_check", 16, 99, 410,
+                  "Check side contours across masters", kerning)
+            kerning.exceptionTitle = vanilla.TextBox((454, 4, 400, 18),
+                                                      "Source choices", sizeStyle="small")
+            check("auto_groups", 454, 25, 410,
+                  "Auto-aligned composite groups", kerning)
+            check("cross_script", 454, 49, 410,
+                  "Allow cross-script sources", kerning)
+
+            eligibility.includeTitle = vanilla.TextBox((16, 4, 360, 18),
+                                                        "Include in preview", sizeStyle="small")
+            check("include_figures", 16, 25, 190, "Figures", eligibility)
+            check("include_marks", 220, 25, 190, "Marks", eligibility)
+            check("include_empty", 16, 49, 190, "Empty placeholders", eligibility)
+            check("include_nonexporting", 220, 49, 230,
+                  "Non-exporting glyphs", eligibility)
+            check("include_alternates", 16, 73, 420,
+                  "Suffix variants and alternates", eligibility)
+            eligibility.updateTitle = vanilla.TextBox((454, 4, 400, 18),
+                                                       "After applying", sizeStyle="small")
+            check("sync_metrics", 454, 25, 410,
+                  "Sync master-layer metrics", eligibility)
+            check("sync_special_layers", 454, 49, 410,
+                  "Sync special layers too", eligibility)
+
+            self.w.rule = vanilla.HorizontalLine((16, 214, -16, 1))
+            self.w.previewButton = vanilla.Button((16, 222, 130, 26), "Preview", callback=self.preview)
+            self.w.previewButton.setToolTip("Build proposals and diagnostics without changing the font.")
+            self.w.selectButton = vanilla.Button((164, 222, 140, 26), "Select eligible", callback=self.select_eligible)
+            self.w.selectButton.setToolTip("Check preview rows that have no warnings.")
+            self.w.clearButton = vanilla.Button((322, 222, 135, 26), "Clear selection", callback=self.clear_selection)
+            self.w.clearButton.setToolTip("Uncheck every preview row.")
+            self.w.applyButton = vanilla.Button((-155, 222, 139, 26), "Apply checked", callback=self.apply)
+            self.w.applyButton.setToolTip("Apply only the checked preview rows to this font.")
             self.w.applyButton.enable(False)
-            self.w.summary = vanilla.TextBox((16, 296, -16, 18),
+            self.w.summary = vanilla.TextBox((16, 253, -16, 18),
                                              "Choose options and preview the font.", sizeStyle="small")
             column_descriptions = [
-                {"title": "Use", "key": "Use", "width": 48, "editable": True,
+                {"title": "Use", "key": "Use", "width": 42, "editable": True,
                  "cell": vanilla.CheckBoxListCell()},
-                {"title": "Glyph", "key": "Glyph", "width": 145, "editable": False},
-                {"title": "Type", "key": "Type", "width": 100, "editable": False},
-                {"title": "Side", "key": "Side", "width": 55, "editable": False},
-                {"title": "Current", "key": "Current", "width": 105, "editable": False},
-                {"title": "Proposed", "key": "Proposed", "width": 115, "editable": False},
-                {"title": "Confidence", "key": "Confidence", "width": 80, "editable": False},
-                {"title": "Reason", "key": "Reason", "width": 230, "editable": False},
-                {"title": "Warning", "key": "Warning", "width": 260, "editable": False},
+                {"title": "Glyph", "key": "Glyph", "width": 115, "editable": False},
+                {"title": "Type", "key": "Type", "width": 85, "editable": False},
+                {"title": "Side", "key": "Side", "width": 48, "editable": False},
+                {"title": "Current", "key": "Current", "width": 84, "editable": False},
+                {"title": "Proposed", "key": "Proposed", "width": 84, "editable": False},
+                {"title": "Confidence", "key": "Confidence", "width": 75, "editable": False},
+                {"title": "Reason", "key": "Reason", "width": 177, "editable": False},
+                {"title": "Warning", "key": "Warning", "width": 177, "editable": False},
             ]
-            self.w.proposalList = vanilla.List((16, 318, -16, -106), [],
+            self.w.proposalList = vanilla.List((16, 274, -16, -89), [],
                 columnDescriptions=column_descriptions, showColumnTitles=True,
                 allowsSorting=False, editCallback=self.list_edited)
-            self.w.reportButton = vanilla.Button((16, -92, 160, 24), "Show full report",
+            self.w.reportButton = vanilla.Button((16, -78, 150, 24), "Show full report",
                                                   callback=self.show_report)
-            self.w.status = vanilla.TextBox((16, -58, -16, 40),
+            self.w.reportButton.setToolTip("Show every proposal and diagnostic note in the Macro Window.")
+            self.w.status = vanilla.TextBox((16, -47, -16, 28),
                 "No font changes until Apply checked.", sizeStyle="small")
             self.w.open()
 
@@ -866,7 +1192,7 @@ def launch():
             for item in self.proposals:
                 rows.append({"Use": item["include"], "Glyph": item["glyph"],
                     "Type": item["kind"], "Side": item["side"],
-                    "Current": item["before"] or "—", "Proposed": item["after"],
+                    "Current": item["before"] or "—", "Proposed": item["after"] or "—",
                     "Confidence": item["confidence"], "Reason": item["reason"],
                     "Warning": item["warning"]})
             self.w.proposalList.set(rows)
@@ -874,8 +1200,11 @@ def launch():
             ready = sum(bool(item["include"]) for item in self.proposals)
             self.w.summary.set("%d proposals | %d checked | %d diagnostic notes" %
                                (len(rows), ready, len(self.diagnostics)))
-            if options["scope"] == "Selected glyphs" and not selected_names(self.font):
+            if (options["scope"] == "Selected glyphs" and
+                    not options["font_specific_checks"] and not selected_names(self.font)):
                 self.w.status.set("No glyphs selected. Select glyphs and preview again.")
+            elif options["font_specific_checks"]:
+                self.w.status.set("Font specific checks scanned the whole font. Review proposals.")
             else:
                 self.w.status.set("Review checkboxes. No changes have been made.")
 
