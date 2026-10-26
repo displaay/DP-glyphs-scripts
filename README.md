@@ -20,6 +20,7 @@ See [`Glyphset/HOW TO INSTALL.txt`](Glyphset/HOW%20TO%20INSTALL.txt) for Glyphs 
 
 | Plugin | Description |
 |---|---|
+| [`Plugins/SpecialLayerCopy.glyphsPlugin`](Plugins/SpecialLayerCopy.glyphsPlugin/README.md) | Copy special layers between masters with **⌘C / ⌘V directly in the Layers palette**, including multiple selected layers, coordinate adaptation, and duplicate prevention. No separate window. |
 | [`Plugins/ScriptBoard.glyphsPalette`](Plugins/ScriptBoard.glyphsPalette/README.md) | Glyphs 4 right-Palette launcher for favorite installed scripts, with search, ordering, persistence, and conflict-checked shortcuts. |
 | [`Plugins/GlyphNote.glyphsPalette`](Plugins/GlyphNote.glyphsPalette/README.md) | Glyphs 4 right-Palette editor for per-glyph notes, with a lock that shares one note across masters or a different note per master, plus Font View note badges. |
 | [`Plugins/VFPreview.glyphsReporter`](Plugins/VFPreview.glyphsReporter/README.md) | Live variable-font interpolation preview with axis sliders, master involvement charts, standalone window, and measurement tools. Install by copying the bundle to `~/Library/Application Support/Glyphs/Plugins/`. |
@@ -30,6 +31,7 @@ See [`Glyphset/HOW TO INSTALL.txt`](Glyphset/HOW%20TO%20INSTALL.txt) for Glyphs 
 - Glyphs 3 for the existing scripts and VF Preview
 - Glyphs 4.0.1 or later for Script Board and Glyph Note
 - Glyphs 4 for DP Swapper
+- Glyphs 4 for Copy Special Layers
 - Glyphs 4 for the Displaay glyphset
 - Glyphs 4 for Space basics
 - Glyphs Python environment
@@ -42,6 +44,10 @@ Some scripts use additional libraries:
 | `fontTools` | Required by `Export/Selective Variable Font Export.py`; optional for `Tools/Weight Axis Converter.py`, which falls back to a built-in mapper if unavailable. |
 
 Some larger UI scripts build their interface directly with AppKit/objc rather than `vanilla`, notably `Spacing/master_spacing_and_kerning.py` and `Spacing/transfer_ufo_metrics_and_kerning.py`.
+
+## Plug-in Installation
+
+Plug-in bundles live in [`Plugins`](Plugins/). Drag the bundle you want onto the Glyphs app icon in Finder or the Dock, then relaunch Glyphs. When updating Copy Special Layers, remove the older installed copy first so Glyphs loads only one version.
 
 ## Script Installation
 
@@ -125,6 +131,12 @@ Most files include `# MenuTitle` metadata, so they show up in the Glyphs Scripts
 
 ## Usage Notes
 
+### Copy Special Layers
+
+The plug-in is located at [`Plugins/SpecialLayerCopy.glyphsPlugin`](Plugins/SpecialLayerCopy.glyphsPlugin/README.md). In the Layers palette, select one or more special layers and press **⌘C**, then select the destination master row and press **⌘V**. You can select rows under multiple target masters. No separate window or additional Python modules are required.
+
+Copies retain their drawings and layer settings. Intermediate coordinates that follow the source master move to the target master's coordinates; existing matches are skipped to avoid duplicates. Copy and paste within the same font and glyph. The clipboard captures a snapshot, and normal text and drawing-canvas shortcuts keep their usual behavior.
+
 ### Space basics
 
 Open a font in Glyphs 4 and run **Script → Spacing → Space basics**. Choose the scope and rules in the **Spacing**, **Kerning groups**, and **Eligibility & update** tabs, then click **Preview**. Hover over any setting for a short explanation. Check the proposals you want and click **Apply checked**. **Show full report** prints every proposal and skip reason in the Macro Window. Preferences are remembered between runs.
@@ -152,7 +164,7 @@ For a focused in-app check, use a copy of a font containing `A`, `Aacute`, `a`, 
 
 - This repo contains a script collection, Glyphs plugins, and the Displaay glyphset assets; it is not distributed as a single packaged plugin.
 - Script filenames reflect working names in Glyphs workflows and may include legacy typos for compatibility (e.g. `Horziontals calculator.py`, `Validator bypass.py`).
-- Palette plug-ins include unit tests under `Tests/` for their Glyphs-independent core logic; plug-in smoke tests require the Glyphs macOS runtime.
+- Python plug-ins include unit tests under `Tests/` for their Glyphs-independent logic; native tests require the Glyphs macOS runtime. Copy Special Layers checks run with `python3 -m unittest Tests.test_special_layer_copy Tests.test_special_layer_copy_shortcuts`; `Tests/test_special_layer_copy_native.py` additionally exercises real Glyphs 4 layer objects through PyObjC.
 - DP Swapper regression tests run with `python3 -m unittest Tests.test_dp_swapper`; `Tests/test_dp_swapper_native.py` additionally tests detached font objects with the Glyphs 4 Python API and `vanilla` available.
 
 ## License
